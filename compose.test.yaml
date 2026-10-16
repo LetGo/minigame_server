@@ -1,0 +1,28 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: minigame_test
+      POSTGRES_PASSWORD: local_integration_only
+      POSTGRES_DB: minigame_test
+    ports:
+      - "127.0.0.1:15439:5432"
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U minigame_test -d minigame_test"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    mem_limit: 384m
+  redis:
+    image: redis:8-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "127.0.0.1:16389:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    mem_limit: 128m
