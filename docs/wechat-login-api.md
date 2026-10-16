@@ -36,7 +36,7 @@ HTTP **200**，`Cache-Control: no-store`。以下仅为结构示例：
 - 多次登录允许多个 token 并存，不会自动踢掉其他设备。
 - 令牌为敏感凭据，不得打印日志、放进 URL 或对外分享。到期、会话失效后重新登录。
 - 不返回微信 session_key、openid 或 AppSecret。
-- 线上当前仅发布登录。新增存档读写接入见 `encrypted-save-api.md`，使用 `Authorization: Bearer <accessToken>` 与加密信封，待存档接口正式上线后启用。尚无刷新令牌、注销、用户资料或 token 校验查询接口。
+线上当前仅发布登录。新增存档读写接入见 `save-api.md`，使用 `Authorization: Bearer *** 与直接 JSON 协议，待存档接口正式上线后启用。尚无刷新令牌、注销、用户资料或 token 校验查询接口。
 
 ## 4. 错误处理
 

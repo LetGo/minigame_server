@@ -3,7 +3,6 @@ import { BadRequestException, ConflictException, HttpException, ServiceUnavailab
 import { Request } from 'express';
 import { AppConfig } from '../config.js';
 import { Infrastructure } from '../infrastructure.js';
-import { Envelope, openRequest, sealResponse } from './secure-envelope.js';
 
 export class DataService {
   constructor(private readonly config: AppConfig, private readonly infrastructure: Infrastructure) {}
@@ -30,15 +29,8 @@ export class DataService {
       request.res?.setHeader('Retry-After', String(Math.max(rate[1], 1)));
       throw new HttpException('DATA_RATE_LIMITED', 429);
     }
-    if (Object.keys(request.query).length) throw new BadRequestException('INVALID_ENCRYPTED_PAYLOAD');
-    const payload = openRequest(token, request.path, request.body);
-    let consumed: string | null;
-    try {
-      consumed = await this.infrastructure.redis.withCommandOptions({ abortSignal: AbortSignal.timeout(3000) }).set(
-        `minigame:data-nonce:${digest}:${(request.body as Envelope).nonce}`, '1', { NX: true, EX: 300 });
-    } catch { throw new ServiceUnavailableException('DATA_STORAGE_UNAVAILABLE'); }
-    if (consumed !== 'OK') throw new ConflictException('REQUEST_REPLAYED');
-    return { token, digest, userId: session.userId, payload, nonce: (request.body as Envelope).nonce, path: request.path };
+    if (Object.keys(request.query).length) throw new BadRequestException('INVALID_DATA_REQUEST');
+    return { userId: session.userId, payload: request.body as unknown };
   }
 
   async save(request: Request) {
@@ -60,13 +52,13 @@ export class DataService {
     } catch { throw new ServiceUnavailableException('DATA_STORAGE_UNAVAILABLE'); }
     const row = result.rows[0];
     if (!row) throw new ConflictException('SAVE_VERSION_CONFLICT');
-    return sealResponse(context.token, context.path, context.nonce, { version: row.version, updatedAt: row.updated_at.toISOString() });
+    return { version: row.version, updatedAt: row.updated_at.toISOString() };
   }
 
   async get(request: Request) {
     const context = await this.readRequest(request);
     if (!context.payload || typeof context.payload !== 'object' || Array.isArray(context.payload) || Object.keys(context.payload).length) {
-      throw new BadRequestException('INVALID_ENCRYPTED_PAYLOAD');
+      throw new BadRequestException('INVALID_DATA_REQUEST');
     }
     let result;
     try {
@@ -74,8 +66,8 @@ export class DataService {
         'SELECT data, version, updated_at FROM game_saves WHERE user_id=$1', [context.userId]);
     } catch { throw new ServiceUnavailableException('DATA_STORAGE_UNAVAILABLE'); }
     const row = result.rows[0];
-    return sealResponse(context.token, context.path, context.nonce, row ?
+    return row ?
       { exists: true, version: row.version, data: row.data, updatedAt: row.updated_at.toISOString() } :
-      { exists: false, version: 0, data: null, updatedAt: null });
+      { exists: false, version: 0, data: null, updatedAt: null };
   }
 }

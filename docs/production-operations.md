@@ -54,17 +54,19 @@ Redis 客户端只有限次重连；若 Redis 持续中断导致客户端停止�
 
 无小游戏客户端新鲜 code，不能声称已完成真实玩家成功登录验收。客户端还需在微信后台配置 request 合法域名并确认 AppID 一致。线上当前不提供存档接口。
 
-## 新增加密存档待发布（本次开发不改生产）
+## 新增 JSON 存档待发布（本次开发不改生产）
 
-代码中新增加密 save/get 与 migration `002_game_saves.sql`，尚未应用生产迁移或更新 Nginx。
+代码新增 HTTPS + Bearer 普通 JSON save/get 与 migration `002_game_saves.sql`，尚未应用生产迁移或更新 Nginx。自定义加密已按要求移除，接入见 `save-api.md`。
+
+现机 API 直接运行 dist；开发测试不可覆盖该目录，以免服务异常重启时误用未发布构建。使用 `npm run typecheck`、`npm test`、`npm run build:client`，再执行 `npx tsc -p tsconfig.build.json --outDir tmp/json-api-candidate-dist`。专用测试 Compose 启动后，用 `MINIGAME_TEST_DIST_DIR=tmp/json-api-candidate-dist node --import tsx --test --test-concurrency=1 test/*.integration.ts` 验证候选构建。不要在未授权发布时直接运行会写 dist 的 `check` / `test:integration`。
 
 发布前按顺序：
 
 1. 做数据库备份；以管理员连接运行迁移（运行账号无建表权限）。
 2. 给 `minigame_app` 授予新表 `game_saves` 的 SELECT/INSERT/UPDATE。不要授予 DELETE 或整个 schema 的泛化写权限。
-3. 构建并测试新版本，准备旧版本构建回滚副本。部署 API 后检查登录回归和存档未认证401；仅有鉴权错误不能证明成功读写，需测试账号完整加密联调。
-4. 更新 Nginx `ops/nginx-h5login.conf.example` 中的独立 `/h5login/api/data/` location：信封限额256KiB，而通用 `/h5login/` 和登录仍保持16KiB；保持mirror/access_log关闭。
+3. 构建并测试新版本，准备旧版本构建回滚副本。部署 API 后检查登录回归和存档未认证401；仅有鉴权错误不能证明成功读写，需测试账号完成完整 JSON 读写联调。
+4. 更新 Nginx `ops/nginx-h5login.conf.example` 中的独立 `/h5login/api/data/` location：HTTP正文限额256KiB（存档原文64KiB），而通用 `/h5login/` 和登录仍保持16KiB；保持mirror/access_log关闭。继续只通过HTTPS公网入口访问。
 5. nginx -t通过后reload，再核对生效配置及现有路由。
-6. 用客户端完整验证登录→无存档get→save→get原文相等→旧version409，并确认密文防篡改与重放拒绝。不要用未认证请求测试代替成功链路。
+6. 用客户端完整验证登录→无存档get→save→get原文相等→旧version409，并检查跨用户隔离、限流、64KiB边界与错误脱敏。没有独立nonce防重放，重复同版本保存由CAS拒绝。不要用未认证请求测试代替成功链路。
 
 备份pg_dump会自动包含新增表。新增表不影响旧版本登录功能；回滚API通常保留新增表和数据，不要为回滚删除存档。
