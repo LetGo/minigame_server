@@ -1,0 +1,55 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { randomBytes } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { runInNewContext } from 'node:vm';
+import { Pool } from 'pg';
+import { loadConfig } from '../src/config.js';
+import { migrate } from '../src/database/migrate.js';
+
+test('compiled API and distributed SDK round trip over real HTTP with least-privilege PostgreSQL role', async () => {
+  const ownerUrl='postgresql://minigame_test:local_integration_only@127.0.0.1:15439/minigame_test';
+  const owner=new Pool({connectionString:ownerUrl});
+  const role='compiled_test_'+randomBytes(6).toString('hex');
+  let app: any;
+  try {
+    await migrate(owner);
+    await owner.query(`CREATE ROLE ${role} LOGIN PASSWORD 'isolated-compiled-test-only'`);
+    await owner.query(`GRANT USAGE ON SCHEMA public TO ${role}`);
+    await owner.query(`GRANT SELECT, INSERT, UPDATE ON game_users, game_saves TO ${role}`);
+    const appModulePath='../dist/application.js', wechatModulePath='../dist/auth/wechat.client.js';
+    const {createApplication}=await import(appModulePath);
+    const {WechatClient}=await import(wechatModulePath);
+    const config=loadConfig({WECHAT_APP_ID:'wx1111111111111111',WECHAT_APP_SECRET:'compiled-test-only',
+      DATABASE_URL:`postgresql://${role}:isolated-compiled-test-only@127.0.0.1:15439/minigame_test`,REDIS_URL:'redis://127.0.0.1:16389/15'});
+    const wechat=new WechatClient(config,async()=>Response.json({openid:role,session_key:'explicit-wechat-test-stub'}));
+    app=await createApplication(config,{wechat}); await app.listen(0,'127.0.0.1');
+    const address=app.getHttpServer().address(); const local=`http://127.0.0.1:${address.port}`;
+    const login=await fetch(local+'/h5login/api/auth/wechat-login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:role})});
+    assert.equal(login.status,200);
+    const auth=await login.json() as any;
+    const mod={exports:{} as any};
+    runInNewContext(await readFile('client/minigame-data-client.js','utf8'),{module:mod,exports:mod.exports,TextEncoder:undefined,TextDecoder:undefined,Buffer:undefined,crypto:undefined});
+    const wx={
+      getRandomValues(options:any){options.success({randomValues:Uint8Array.from(randomBytes(options.length)).buffer});},
+      // Test-only transport adapter: SDK still generates HTTPS URLs; local test server has no TLS.
+      request(options:any){
+        const path=new URL(options.url).pathname;
+        fetch(local+path,{method:options.method,headers:options.header,body:JSON.stringify(options.data)})
+          .then(async r=>options.success({statusCode:r.status,data:await r.json(),header:Object.fromEntries(r.headers)}))
+          .catch(()=>options.fail());
+      }
+    };
+    const store=mod.exports.createDataClient({wx,accessToken:auth.accessToken});
+    assert.equal((await store.get()).exists,false);
+    const data='{ "big":9007199254740993123,"text":"'+'中🚀'.repeat(1400)+'" }\n';
+    assert.equal((await store.save(data,0)).version,1);
+    const loaded=await store.get(); assert.equal(loaded.version,1); assert.equal(loaded.data,data);
+    await assert.rejects(store.save('{}',0),(e:any)=>e.statusCode===409 && e.apiMessage==='SAVE_VERSION_CONFLICT');
+  } finally {
+    if(app)await app.close();
+    await owner.query(`DROP OWNED BY ${role}`);
+    await owner.query(`DROP ROLE IF EXISTS ${role}`);
+    await owner.end();
+  }
+});

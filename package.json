@@ -10,6 +10,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "build:client": "esbuild client/data-client.mjs --bundle --platform=browser --format=cjs --target=es2020 --minify --legal-comments=eof --outfile=client/minigame-data-client.js",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test --test-concurrency=1 test/*.test.ts",
     "pretest:integration": "npm run build",
@@ -32,10 +33,14 @@
     "rxjs": "^7.8.2"
   },
   "devDependencies": {
+    "@noble/ciphers": "2.4.0",
+    "@noble/hashes": "2.4.0",
+    "@scure/base": "2.4.0",
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.5",
     "@types/pg": "^8.23.1",
     "@types/supertest": "^7.2.1",
+    "esbuild": "0.28.2",
     "supertest": "^7.3.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"

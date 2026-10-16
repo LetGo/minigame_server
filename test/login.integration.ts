@@ -28,7 +28,7 @@ test('login HTTP flow with real isolated PostgreSQL and Redis (WeChat transport 
   t.after(async () => { await redis.quit(); await pool.end(); });
   await migrate(pool);
   await migrate(pool);
-  await pool.query('TRUNCATE game_users');
+  await pool.query('TRUNCATE game_users CASCADE');
   await redis.flushDb();
   let upstreamCalls = 0;
   const wechat = new WechatClient(config, async () => {

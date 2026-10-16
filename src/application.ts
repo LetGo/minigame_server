@@ -10,6 +10,8 @@ import { AuthController } from './auth/auth.controller.js';
 import { AuthService } from './auth/auth.service.js';
 import { WechatClient } from './auth/wechat.client.js';
 import { LoginRateGuard } from './auth/login-rate.guard.js';
+import { DataController } from './data/data.controller.js';
+import { DataService } from './data/data.service.js';
 
 @Catch()
 class SafeExceptionFilter implements ExceptionFilter {
@@ -39,18 +41,24 @@ export async function createApplication(config: AppConfig, overrides: { wechat?:
   try {
     const app = await NestFactory.create<NestExpressApplication>({
       module: AppModule,
-      controllers: [AuthController],
+      controllers: [AuthController, DataController],
       providers: [
         { provide: Infrastructure, useValue: infrastructure },
         { provide: CONFIG, useValue: config },
         LoginRateGuard,
+        { provide: DataService, useValue: new DataService(config, infrastructure) },
         { provide: AuthService, useValue: new AuthService(config, infrastructure, overrides.wechat ?? new WechatClient(config)) },
       ],
     }, { bodyParser: false, logger: ['error', 'warn'], abortOnError: false });
     app.setGlobalPrefix('h5login');
     app.set('trust proxy', config.trustLocalProxy ? 'loopback' : false);
     app.use(helmet());
-    app.use(json({ limit: '16kb', strict: true, inflate: false }));
+    const loginJson = json({ limit: '16kb', strict: true, inflate: false });
+    const dataJson = json({ limit: '256kb', strict: true, inflate: false });
+    app.use((request: Request, response: Response, next: NextFunction) => {
+      const parser = ['/h5login/api/data/save', '/h5login/api/data/get'].includes(request.path) ? dataJson : loginJson;
+      parser(request, response, next);
+    });
     app.use((error: unknown, _request: Request, _response: Response, next: NextFunction) => {
       // Normalize before Nest maps SyntaxError and loses the parser's safe error type.
       if (error instanceof Error && 'type' in error && error.type === 'entity.parse.failed') {
