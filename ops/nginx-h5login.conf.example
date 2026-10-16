@@ -1,11 +1,14 @@
 # Add INSIDE the existing HTTPS server block only after provisioning the service.
 # This is a template, not an installed configuration.
 location = /h5login {
+    mirror off;
+    access_log off;
     return 308 /h5login/;
 }
 
 location ^~ /h5login/ {
     mirror off;
+    access_log off;
     client_max_body_size 16k;
     proxy_pass http://127.0.0.1:18740;
     proxy_http_version 1.1;

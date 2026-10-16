@@ -1,0 +1,32 @@
+[Unit]
+Description=Minigame WeChat login API
+Requires=minigame-infrastructure.service
+After=minigame-infrastructure.service network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/.hermes/workspace/projects/minigame_server
+ExecStart=/usr/bin/node --env-file=.env dist/main.js
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+UMask=0077
+MemoryMax=512M
+CPUQuota=100%
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

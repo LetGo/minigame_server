@@ -1,0 +1,16 @@
+[Unit]
+Description=Minigame dedicated PostgreSQL and Redis
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/ubuntu/.hermes/workspace/projects/minigame_server
+ExecStart=/usr/bin/docker compose --env-file .env.production.infrastructure -p minigame-prod -f compose.production.yaml up -d --wait
+TimeoutStartSec=180
+# Intentionally do not stop persistent databases when stopping the API.
+
+[Install]
+WantedBy=multi-user.target

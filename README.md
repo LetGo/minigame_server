@@ -3,7 +3,7 @@
 微信小游戏登录服务。NestJS + PostgreSQL + Redis；Node.js 24+，原生 ESM。
 
 当前只实现登录，不含存档、支付、昵称头像获取、刷新令牌、注销或受保护业务接口。
-**本仓库完成开发和本机隔离测试，不代表已经部署到公网。**
+登录服务已部署至下述 HTTPS 地址。客户端接入文档见 [`docs/wechat-login-api.md`](docs/wechat-login-api.md)，部署与运维见 [`docs/production-operations.md`](docs/production-operations.md)。真实玩家成功登录仍需小游戏新鲜 code 联调。
 
 ## 接口契约
 
@@ -99,7 +99,7 @@ npm run dev
 ```
 
 `.env` 已被 Git 忽略；绝不提交真实 AppSecret、令牌、数据库连接凭据。
-本机实际微信凭据保存在权限 0600 的 `.env`，数据库/Redis 连接仍为待部署配置，不能直接作为已上线环境使用。
+本机实际微信凭据及运行账号连接保存在权限 0600 的 `.env`；独立生产数据库/Redis 已部署。管理员/基础设施凭据在 Git 忽略、权限 0600 的 `.env.production.infrastructure`，禁止回显或提交。
 AppSecret 已在聊天中提供过，生产使用前建议在微信后台重置，再安全更新 `.env`。
 
 生产数据库应使用独立用户/数据库；不要接入或复用 sub2api 的业务数据。
@@ -123,11 +123,11 @@ npm audit
 覆盖用户并发去重、令牌摘要及 TTL、参数和正文限制、限流与伪造 IP、依赖故障、编译入口端口冲突后的退出清理。
 微信客户端单元测试覆盖官方地址/参数、一次调用不重试、错误码映射与异常脱敏。
 
-## 后续部署（本次未执行）
+## 部署步骤参考（本机已完成）
 
 1. 配置独立的持久化 PostgreSQL 和 Redis，设置凭据、私网/loopback 访问以及备份策略。测试 compose 没有持久化，不可转为生产。
 2. 更新 `.env`，保持 `HOST=127.0.0.1`、`PORT=18740`，按需启用 `TRUST_LOCAL_PROXY=true`。
-3. 执行 `npm ci`、`npm run migrate`、`npm run check`、`npm start`，用 systemd 等管理常驻进程。
+3. 执行 `npm ci`、`npm run check`，以数据库管理员连接显式运行迁移，再用 systemd 启动应用。生产 `.env` 使用最小权限运行账号，不可直接以该账号运行 `npm run migrate`。
 4. 经授权后，备份现有 Nginx 配置，将 `ops/nginx-h5login.conf.example` 加入现有 HTTPS server 块，`nginx -t` 成功后 reload。
 5. `proxy_pass` **不带结尾斜杠**，保留 `/h5login` 前缀；不要覆盖 `/request-logs`、`/tqwz-query/` 和 sub2api 根路由。
 6. 新路径必须禁用正文 mirror、缓存及任何请求正文/令牌日志。Nginx 覆盖 `X-Forwarded-For`，不要透传客户端伪造的来源。

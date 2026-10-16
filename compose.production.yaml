@@ -1,0 +1,50 @@
+# Dedicated production storage; never use compose.test.yaml for production.
+services:
+  postgres:
+    image: postgres@sha256:96d56f7f57c6aacd1fcb908bc83b345ec5f83231ee486dd66a1baadce274db88
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: minigame
+      POSTGRES_USER: minigame_owner
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+    ports:
+      - '127.0.0.1:15440:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    shm_size: 128m
+    mem_limit: 768m
+    cpus: 1.0
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U minigame_owner -d minigame']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging:
+      driver: json-file
+      options: {max-size: '10m', max-file: '3'}
+  redis:
+    image: redis@sha256:09160599abd229764c0fb44cb6be640294e1d360a54b19985ab4843dcf2d90f1
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?required}
+    command:
+      - /bin/sh
+      - -ec
+      - 'exec redis-server --appendonly yes --appendfsync everysec --maxmemory 96mb --maxmemory-policy noeviction --requirepass "$$REDIS_PASSWORD"'
+    ports:
+      - '127.0.0.1:16390:6379'
+    volumes:
+      - redis_data:/data
+    mem_limit: 192m
+    cpus: 0.5
+    healthcheck:
+      test: ['CMD-SHELL', 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -q PONG']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging:
+      driver: json-file
+      options: {max-size: '10m', max-file: '3'}
+volumes:
+  postgres_data:
+  redis_data:

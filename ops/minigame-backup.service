@@ -1,0 +1,9 @@
+[Unit]
+Description=Minigame PostgreSQL local backup
+Requires=docker.service
+After=docker.service minigame-infrastructure.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/lib/minigame-server/backup-production.py
+UMask=0077
