@@ -5,7 +5,7 @@
 - 入口：`https://sub2api.wdaveh5game.com/h5login/api/auth/wechat-login`，POST JSON。
 - API：`minigame-login.service`，ubuntu 用户，`127.0.0.1:18740`，512 MiB 内存上限、1 CPU 配额、异常自动重启、开机启动。
 - 存储：独立 Compose 项目 `minigame-prod`，`compose.production.yaml`。PostgreSQL 18、Redis 8 镜像按当前已安装镜像 digest 固定，不跟随 latest 自动升级。
-- PostgreSQL：`127.0.0.1:15440`，数据库 `minigame`。管理员 `minigame_owner` 负责迁移；运行用户 `minigame_app` 仅有用户表 SELECT/INSERT/UPDATE，无建库、建角色、超级用户、DELETE 或迁移表访问权限。
+- PostgreSQL：`127.0.0.1:15440`，数据库 `minigame`。管理员 `minigame_owner` 负责迁移；运行用户 `minigame_app` 仅有用户表及存档表 SELECT/INSERT/UPDATE，无建库、建角色、超级用户、DELETE 或迁移表访问权限。
 - Redis：`127.0.0.1:16390`，独立密码、AOF everysec、96 MiB maxmemory/noeviction。Redis 内存不足时登录会失败而非悄悄驱逐会话，需要监控并扩容。令牌到期/会话丢失需重新登录。
 - 存储均为命名卷，非测试 tmpfs；容器资源上限为 PG 768 MiB、Redis 192 MiB。禁止 `docker compose down -v`，避免删除生产数据。
 - `minigame-infrastructure.service` 管理基础设施开机启动；容器自身配置 unless-stopped。停止 API 不会停止数据库。
@@ -15,7 +15,7 @@
 
 `.env` 和 `.env.production.infrastructure` 均为 0600 并被 Git 忽略。不要打印整个文件、在命令行参数中展开连接密码或把内容发送到聊天/日志。
 
-Nginx 的生效文件为 `/etc/nginx/sites-enabled/sub2api`（本机不是指向 available 的软链接）。新增路由带 `BEGIN/END MINIGAME LOGIN` 标记，保留原前缀代理、不带结尾斜杠。新路径关闭正文 mirror、access_log、proxy cache，覆盖来源 IP 头，正文上限 16 KiB。未改原 `/`、`/request-logs` 和 `/tqwz-query/` 路由。
+Nginx 的生效文件为 `/etc/nginx/sites-enabled/sub2api`（本机不是指向 available 的软链接）。新增路由带 `BEGIN/END MINIGAME LOGIN` 标记，保留原前缀代理、不带结尾斜杠。新路径关闭正文 mirror、access_log、proxy cache，覆盖来源 IP 头。登录及通用路径正文上限 16 KiB，独立 `/h5login/api/data/` 路径为 256 KiB，存档原文仍限 64 KiB。未改原 `/`、`/request-logs` 和 `/tqwz-query/` 路由。
 
 修改前的 Nginx 备份位于 `/var/backups/minigame-server/nginx-sub2api-20261016T133941Z.conf`。回滚仅移除该标记块或恢复此备份；若原站点此后发生修改，不要直接覆盖整份配置。任何变更后先 `sudo nginx -t`，通过后 reload。
 
@@ -52,15 +52,24 @@ Redis 客户端只有限次重连；若 Redis 持续中断导致客户端停止�
 
 本次验证包括真实生产数据库迁移/最小权限、真实 Redis 连接、开机启动配置、服务常驻、公网 TLS、参数校验、畸形 JSON 脱敏、Nginx 413 限制、真实微信无效 code 401，以及原三个路由响应状态不变。隔离环境的 11 项单元测试、10 项集成测试通过，集成测试成功登录使用明确的微信测试替身。
 
-无小游戏客户端新鲜 code，不能声称已完成真实玩家成功登录验收。客户端还需在微信后台配置 request 合法域名并确认 AppID 一致。线上当前不提供存档接口。
+无小游戏客户端新鲜 code，不能声称已完成真实玩家成功登录验收。客户端还需在微信后台配置 request 合法域名并确认 AppID 一致。线上现已提供存档接口，完整真实玩家链路仍需客户端验收。
 
-## 新增 JSON 存档待发布（本次开发不改生产）
+## JSON 存档生产发布（2026-10-16）
 
-代码新增 HTTPS + Bearer 普通 JSON save/get 与 migration `002_game_saves.sql`，尚未应用生产迁移或更新 Nginx。自定义加密已按要求移除，接入见 `save-api.md`。
+已获授权并发布 HTTPS + Bearer 普通 JSON save/get，生产代码提交 `25ea2cc`。migration `002_game_saves.sql` 已应用，运行角色新增表最小权限已回读验证，Nginx 独立数据路由已启用。自定义加密已按要求移除，接入见 `save-api.md`。
+
+本次上线记录：
+
+- 发布前数据库备份：`/var/backups/minigame-server/minigame-20261016T145528694969Z.dump`；发布后另已补做一次成功备份。
+- 旧 dist、Nginx 修改前配置及构建清单：仓库 `tmp/json-save-release-20261016T145625Z/`；当前记录 `tmp/json-save-current-release.json`。这些本机文件被 Git 忽略，不含配置凭据。
+- 发布前重新运行 17 项单元测试、21 项隔离集成测试，全部通过；部署产物逐文件哈希与经过测试的候选一致。
+- 公网 HTTPS 实测 15 项检查通过，包括临时鉴权账号无存档 get、save/get 原文一致、409、用户隔离、64 KiB 原文经 Nginx 往返、超限拒绝、登录畸形 JSON 脱敏和微信无效 code 401。
+- 临时测试账号、存档、会话及限流键均已清理并回读；不涉及真实玩家存档。该测试通过管理员准备临时账号/会话，不是微信真实玩家成功登录证明。
+- API 为 active/running，发布后 NRestarts=0；原 `/` 200、`/request-logs` 401、`/tqwz-query/` 200 保持不变。测试 Compose 已关闭，生产 PG/Redis 未重启。
 
 现机 API 直接运行 dist；开发测试不可覆盖该目录，以免服务异常重启时误用未发布构建。使用 `npm run typecheck`、`npm test`、`npm run build:client`，再执行 `npx tsc -p tsconfig.build.json --outDir tmp/json-api-candidate-dist`。专用测试 Compose 启动后，用 `MINIGAME_TEST_DIST_DIR=tmp/json-api-candidate-dist node --import tsx --test --test-concurrency=1 test/*.integration.ts` 验证候选构建。不要在未授权发布时直接运行会写 dist 的 `check` / `test:integration`。
 
-发布前按顺序：
+后续发布参考顺序：
 
 1. 做数据库备份；以管理员连接运行迁移（运行账号无建表权限）。
 2. 给 `minigame_app` 授予新表 `game_saves` 的 SELECT/INSERT/UPDATE。不要授予 DELETE 或整个 schema 的泛化写权限。

@@ -2,7 +2,7 @@
 
 微信小游戏登录服务。NestJS + PostgreSQL + Redis；Node.js 24+，原生 ESM。
 
-当前代码提供微信登录与 JSON 存档保存/获取，不含支付、昵称头像获取、刷新令牌、注销。**线上目前仅发布登录，新增存档接口尚未上线。** 存档协议与小游戏SDK见 [`docs/save-api.md`](docs/save-api.md)。
+当前代码提供微信登录与 JSON 存档保存/获取，不含支付、昵称头像获取、刷新令牌、注销。**微信登录和 JSON 存档接口均已上线，可进行客户端联调。** 存档协议与可选小游戏 SDK 见 [`docs/save-api.md`](docs/save-api.md)；客户端也可自行调用接口。
 登录服务已部署至下述 HTTPS 地址。客户端接入文档见 [`docs/wechat-login-api.md`](docs/wechat-login-api.md)，部署与运维见 [`docs/production-operations.md`](docs/production-operations.md)。真实玩家成功登录仍需小游戏新鲜 code 联调。
 
 ## 接口契约
@@ -32,7 +32,7 @@ Content-Type: application/json
 
 - 默认有效期 7 天，可配置；到期或 Redis 会话丢失时，客户端重新 `wx.login()`。
 - 多次登录允许多个令牌共存，用户 ID 不变；不是单设备登录/踢下线方案。
-- 存档接口读取 `Authorization: Bearer <accessToken>`，通过令牌摘要查询 Redis 并校验用户/应用归属；HTTPS 下直接收发 JSON，无自定义加密。见存档接入文档；尚未发布到生产。
+- 存档接口读取 `Authorization: Bearer <accessToken>`，通过令牌摘要查询 Redis 并校验用户/应用归属；HTTPS 下直接收发 JSON，无自定义加密。见存档接入文档，现已发布到生产。
 - 不返回、记录或持久化微信 `session_key`；不返回 `openid` 或 AppSecret。
 - 微信校验成功后，PG 以 `(app_id, open_id)` 唯一键原子 upsert 用户，Redis 仅保存随机令牌的 SHA-256 摘要键及会话元信息。
 - PG/Redis 任一失败均不返回令牌。Redis 写入失败时 PG 用户记录可能已创建；重试成功后仍复用同一用户。
@@ -104,7 +104,7 @@ AppSecret 已在聊天中提供过，生产使用前建议在微信后台重置�
 
 生产数据库应使用独立用户/数据库；不要接入或复用 sub2api 的业务数据。
 迁移显式执行，不在 API 启动时自动建表。迁移在事务和 advisory lock 内执行，并校验已执行文件的 SHA-256，后续通过新增 SQL 文件演进，勿修改已执行迁移。
-建议迁移账号与运行账号分离，运行账号只授予 `game_users` 所需读写权限。
+建议迁移账号与运行账号分离，运行账号仅授予 `game_users`、`game_saves` 的 SELECT/INSERT/UPDATE 权限。
 
 ## 自动测试
 
