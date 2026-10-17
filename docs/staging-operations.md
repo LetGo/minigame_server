@@ -40,6 +40,15 @@ sudo docker compose --env-file .env.staging.infrastructure -p minigame-staging -
 
 若Redis长时间断连导致重连耗尽，恢复存储后仅重启staging API；不因测试环境问题重启正式服务。Redis noeviction有意在内存不足时报错，不以驱逐会话掩盖容量问题。
 
+## 每日最多领取50份更新（2026-10-17）
+
+- 源代码 `f821c5b` 部署到 `runtime/staging/releases/20261017T093822Z-f821c5b`，只原子切换测试 current 并重启 minigame-staging；无 schema、权限、Nginx 或正式服务变更。
+- 每邀请人按北京时间自然日最多新领取50份；数据库锁串行化和服务端时间校验，跨token/进程一致；已领取重试不占额度，超额409 INVITE_DAILY_CLAIM_LIMIT，记录保留待领取，可次日继续。
+- 类型检查、18单测、46集成、2部署配置测试、依赖审计0漏洞；独立代码复核通过。
+- 公网合成fixtures验证：49已领取时两个token并发请求只允许1条成功；其余409且保持未领取；重试凭据一致；昨日50不占今日额度；北京时间零点包含、次日零点排除；升级前已领取超50时拒绝新增领取。
+- 既有29项公网检查、135条未领取优先跨页回归均通过；自身合成数据/会话清理回读。运行进程cwd指向新release、active/NRestarts0，正式产物/.env哈希及PID/启动时间未变。
+- 完整证据：`tmp/daily-claim-limit-deploy/verification.json`。公网验证使用临时合成账号/会话，不等同真实微信登录与客户端发奖验收。
+
 ## 未领取优先更新（2026-10-17）
 
 - 按明确授权仅部署测试服务，源代码 `749695f`；发布快照 `runtime/staging/releases/20261017T084529Z-749695f`。旧快照保留用于回滚。
