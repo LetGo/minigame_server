@@ -43,7 +43,7 @@
 
 ## 邀请注册统计发布（2026-10-18，北京时间）
 
-- 功能提交 `a9e3f5d`；后台快照 `runtime/dashboard/releases/20261017T164017Z-a9e3f5d`，只替换 `dashboard/queries.mjs` 和 `dashboard/public/app.js`。卡片新增“今日邀请新注册”及其占比，14 日趋势增加“其中邀请注册”。
+- 功能提交 `a9e3f5d`；后台快照 `runtime/dashboard/releases/20261017T164017Z-a9e3f5d`，只替换 `dashboard/queries.mjs` 和 `dashboard/public/app.js`。卡片新增“今日邀请新注册”及其占比，14 日趋势增加“其中邀请注册”。后续趋势展示改为日期降序（最新日期在最上方），仅前端排序，不改变接口顺序或统计口径。
 - 无迁移、无 DB 写入、无鉴权/密码变更；仅重启 dashboard。游戏 API、常驻测试进程、游戏产物、全部环境文件、迁移和 Nginx 哈希逐项验证未变。
 - 18 单测、8 后台、77 集成、2 运维通过，audit 0，独立审查通过。公网 HTML/JS/API/DOM 与数据库独立聚合交叉核对 72 项通过，原后台 26 项回归通过。非真实浏览器验收。
 - 证据 `tmp/dashboard-invited-registrations/`；临时自动化 Compose 已停止，未创建正式玩家验证数据。
