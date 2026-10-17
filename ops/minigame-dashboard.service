@@ -1,0 +1,32 @@
+[Unit]
+Description=Minigame read-only analytics dashboard
+Requires=minigame-infrastructure.service
+After=minigame-infrastructure.service network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/.hermes/workspace/projects/minigame_server/runtime/dashboard/current
+ExecStart=/usr/bin/node --env-file=/home/ubuntu/.hermes/workspace/projects/minigame_server/.env.dashboard dashboard/server.mjs
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+UMask=0077
+MemoryMax=256M
+CPUQuota=50%
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -13,6 +13,7 @@
     "build:client": "esbuild client/data-client.mjs --bundle --platform=browser --format=cjs --target=es2020 --minify --legal-comments=eof --outfile=client/minigame-data-client.js",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test --test-concurrency=1 test/*.test.ts",
+    "test:dashboard": "node --test --test-concurrency=1 test/dashboard*.test.mjs",
     "pretest:integration": "npm run build",
     "test:integration": "tsx --test --test-concurrency=1 test/*.integration.ts",
     "start": "node --env-file=.env dist/main.js",

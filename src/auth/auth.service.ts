@@ -43,6 +43,17 @@ export class AuthService {
       if (isNewUser) {
         await client.query('UPDATE game_users SET first_login_completed = true WHERE id = $1', [user.id]);
       }
+      // Capture the successful login's DB time after acquiring the user lock.
+      // Daily activity and registration commit together; Redis/storage failures roll both back.
+      await client.query(
+        `WITH login AS (
+           UPDATE game_users SET last_login_at=clock_timestamp() WHERE id=$1
+           RETURNING app_id,id,last_login_at
+         ) INSERT INTO game_daily_logins(app_id,user_id,activity_date,first_login_at)
+           SELECT app_id,id,(last_login_at AT TIME ZONE 'Asia/Shanghai')::date,last_login_at FROM login
+           ON CONFLICT (app_id,activity_date,user_id) DO NOTHING`,
+        [user.id],
+      );
       await client.query('COMMIT');
       return { accessToken, tokenType: 'Bearer', expiresIn: this.config.sessionTtlSeconds, isNewUser, user: { id: user.id, openid } };
     } catch {

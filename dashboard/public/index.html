@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小游戏数据后台</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Login Screen -->
+        <div id="login-screen" class="screen">
+            <div class="login-box">
+                <h2>小游戏数据后台</h2>
+                <form id="login-form">
+                    <div class="form-group">
+                        <label for="username">用户名</label>
+                        <input type="text" id="username" name="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">密码</label>
+                        <input type="password" id="password" name="password" required>
+                    </div>
+                    <button type="submit">登录</button>
+                    <div id="login-error" class="error"></div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Main Dashboard -->
+        <div id="dashboard-screen" class="screen hidden">
+            <div class="dashboard-layout">
+                <aside class="sidebar">
+                    <nav>
+                        <button class="nav-btn active" data-view="overview">概览</button>
+                        <button class="nav-btn" data-view="player">玩家查询</button>
+                    </nav>
+                </aside>
+                <main class="content">
+                    <header class="toolbar">
+                        <h1 id="page-title">概览</h1>
+                        <button id="logout-btn" class="btn-logout">退出</button>
+                    </header>
+                    <div id="view-container"></div>
+                </main>
+            </div>
+        </div>
+    </div>
+    <script src="app.js" defer></script>
+</body>
+</html>

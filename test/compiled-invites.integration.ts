@@ -20,6 +20,7 @@ test('compiled referral APIs over real HTTP with least-privilege PG, real Redis 
     roleCreated = true;
     await owner.query(`GRANT USAGE ON SCHEMA public TO ${role}`);
     await owner.query(`GRANT SELECT, INSERT, UPDATE ON game_users, game_saves, game_profiles, game_invitations TO ${role}`);
+    await owner.query(`GRANT SELECT, INSERT ON game_daily_logins TO ${role}`);
     const buildDir = resolve(process.env.MINIGAME_TEST_DIST_DIR ?? 'dist');
     const { createApplication } = await import(pathToFileURL(resolve(buildDir, 'application.js')).href);
     const { WechatClient } = await import(pathToFileURL(resolve(buildDir, 'auth/wechat.client.js')).href);
@@ -54,6 +55,14 @@ test('compiled referral APIs over real HTTP with least-privilege PG, real Redis 
     assert.equal(a.isNewUser, true);
     assert.equal(b.isNewUser, true);
     assert.equal(c.isNewUser, true);
+
+    await t.test('compiled successful logins persist one daily row without activity update/delete permission', async () => {
+      await login('inviter_' + role);
+      const result = await owner.query('SELECT count(*)::int n FROM game_daily_logins WHERE app_id=$1 AND user_id=$2', [appId, a.user.id]);
+      assert.equal(result.rows[0].n, 1);
+      const rights = (await owner.query("SELECT has_table_privilege($1,'game_daily_logins','INSERT') can_insert,has_table_privilege($1,'game_daily_logins','UPDATE') can_update,has_table_privilege($1,'game_daily_logins','DELETE') can_delete", [role])).rows[0];
+      assert.deepEqual(rights, { can_insert: true, can_update: false, can_delete: false });
+    });
 
     await t.test('compiled source scene report persists first-registration attribution with restricted runtime role', async () => {
       const actor = await login('source_scene_compiled_' + role);

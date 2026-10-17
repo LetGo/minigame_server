@@ -1,0 +1,2 @@
+import assert from 'node:assert/strict';import {test} from 'node:test';import {readFile} from 'node:fs/promises';
+test('dashboard renders all returned player values as text; credentials never persist in browser storage',async()=>{const js=await readFile(new URL('../dashboard/public/app.js',import.meta.url),'utf8');assert.doesNotMatch(js,/innerHTML|outerHTML|insertAdjacentHTML|document\.write|localStorage|sessionStorage|eval\(/);assert.match(js,/textContent/);assert.match(js,/Asia\/Shanghai/);assert.doesNotMatch(js,/openid[^\n]{0,80}\.trim\(/);});

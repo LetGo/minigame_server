@@ -2,7 +2,9 @@
 
 微信小游戏登录服务。NestJS + PostgreSQL + Redis；Node.js 24+，原生 ESM。
 
-当前代码提供微信登录、JSON 存档保存/获取及用户资料/邀请拉新接口，不含支付、刷新令牌、注销；头像昵称由客户端获得授权后上传。**正式环境已有微信登录与 JSON 存档；最新 `user.openid`、`isNewUser` 和资料/邀请功能已部署独立测试环境，正式环境尚未发布。** 存档协议与可选小游戏 SDK 见 [`docs/save-api.md`](docs/save-api.md)；邀请接入见 [`docs/invite-api.md`](docs/invite-api.md)，客户端可自行调用 HTTPS JSON，无需新增 SDK。
+当前代码提供微信登录、JSON 存档保存/获取及用户资料/邀请拉新接口，不含支付、刷新令牌、注销；头像昵称由客户端获得授权后上传。**微信登录、存档、`user.openid`、`isNewUser`、资料、邀请及首次来源 scene 已部署正式环境与独立测试环境。** 存档协议与可选小游戏 SDK 见 [`docs/save-api.md`](docs/save-api.md)；邀请接入见 [`docs/invite-api.md`](docs/invite-api.md)，客户端可自行调用 HTTPS JSON，无需新增 SDK。
+
+新增独立登录的只读运营后台：今日登录活跃、新注册、实时次留、openid 玩家/原始存档查询。统计口径、安全及运维见 [`docs/dashboard.md`](docs/dashboard.md)。
 登录服务已部署至下述 HTTPS 地址。客户端接入文档见 [`docs/wechat-login-api.md`](docs/wechat-login-api.md)，部署与运维见 [`docs/production-operations.md`](docs/production-operations.md)。真实玩家成功登录仍需小游戏新鲜 code 联调。
 
 ## 常驻测试环境
