@@ -41,6 +41,13 @@
 - 证据 `tmp/dashboard-rollout/{verification,backup,db-after,public-smoke,public-dom,staging-public}.json`。临时预览进程及一次性测试 Compose 已停止；正式、常驻测试服务保留。
 - 管理员凭据仅位于已忽略的 0600 `.env.dashboard.access`；不写进本文、提交或公开 URL。未来更改/部署仍需逐次授权。
 
+## 邀请注册统计发布（2026-10-18，北京时间）
+
+- 功能提交 `a9e3f5d`；后台快照 `runtime/dashboard/releases/20261017T164017Z-a9e3f5d`，只替换 `dashboard/queries.mjs` 和 `dashboard/public/app.js`。卡片新增“今日邀请新注册”及其占比，14 日趋势增加“其中邀请注册”。
+- 无迁移、无 DB 写入、无鉴权/密码变更；仅重启 dashboard。游戏 API、常驻测试进程、游戏产物、全部环境文件、迁移和 Nginx 哈希逐项验证未变。
+- 18 单测、8 后台、77 集成、2 运维通过，audit 0，独立审查通过。公网 HTML/JS/API/DOM 与数据库独立聚合交叉核对 72 项通过，原后台 26 项回归通过。非真实浏览器验收。
+- 证据 `tmp/dashboard-invited-registrations/`；临时自动化 Compose 已停止，未创建正式玩家验证数据。
+
 ## 发布/恢复注意事项
 
 发布须获用户明确授权。先全量测试、独立审查、正式备份及临时库实际恢复验证；再用生产 owner 执行 `node ops/dashboard-admin.mjs prepare`（迁移、最小权限及首次凭据生成），切换正式游戏 API 和后台服务；健康后安装 Nginx 路由并 `nginx -t`/reload，最后实际 HTTPS 登录/查询/退出及数据库回读。
