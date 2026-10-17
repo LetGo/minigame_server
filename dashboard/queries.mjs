@@ -14,6 +14,11 @@ export async function overview(pool, appId) {
         (SELECT count(*)::int FROM game_users u WHERE u.app_id=$1 AND u.first_login_completed
           AND u.created_at>=d::timestamp AT TIME ZONE 'Asia/Shanghai'
           AND u.created_at<(d+1)::timestamp AT TIME ZONE 'Asia/Shanghai') AS new_users,
+        (SELECT count(*)::int FROM game_users u WHERE u.app_id=$1 AND u.first_login_completed
+          AND u.created_at>=d::timestamp AT TIME ZONE 'Asia/Shanghai'
+          AND u.created_at<(d+1)::timestamp AT TIME ZONE 'Asia/Shanghai'
+          AND EXISTS (SELECT 1 FROM game_invitations i WHERE i.app_id=u.app_id AND i.invitee_user_id=u.id)
+        ) AS invited_new_users,
         CASE WHEN d>=coverage_start THEN
           (SELECT count(*)::int FROM game_daily_logins l WHERE l.app_id=$1 AND l.activity_date=d)
         END AS dau,
@@ -32,10 +37,12 @@ export async function overview(pool, appId) {
       'today',s.today::text,'timezone','Asia/Shanghai','environment','production',
       'trackingStartedAt',s.tracking_started_at,'coverageStart',s.coverage_start::text,
       'metrics',json_build_object('dau',current.dau,'newUsers',current.new_users,
+        'invitedNewUsers',current.invited_new_users,
         'totalUsers',(SELECT count(*)::int FROM game_users WHERE app_id=$1 AND first_login_completed),
         'd1',json_build_object('cohortDate',(s.today-1)::text,'cohortSize',current.cohort_size,
           'returned',current.returned,'rate',current.returned::float8/nullif(current.cohort_size,0))),
       'history',(SELECT json_agg(json_build_object('date',d::text,'newUsers',new_users,'dau',dau,
+          'invitedNewUsers',invited_new_users,
           'cohortSize',cohort_size,'returned',returned,'d1Rate',returned::float8/nullif(cohort_size,0)) ORDER BY d) FROM daily)
     ) AS result FROM settings s JOIN daily current ON current.d=s.today`, [appId]);
   if (!rows[0]?.result) throw new Error('Analytics metadata unavailable');
