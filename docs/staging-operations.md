@@ -40,6 +40,14 @@ sudo docker compose --env-file .env.staging.infrastructure -p minigame-staging -
 
 若Redis长时间断连导致重连耗尽，恢复存储后仅重启staging API；不因测试环境问题重启正式服务。Redis noeviction有意在内存不足时报错，不以驱逐会话掩盖容量问题。
 
+## 首次来源场景更新（2026-10-17）
+
+- 按明确授权将源代码 `62e4dec` 发布至 `runtime/staging/releases/20261017T144522Z-62e4dec`，原子切换current，仅重启 `minigame-staging`。
+- staging owner显式执行迁移004；迁移001–003校验通过，runtime仍无DELETE/DDL权限。新列/触发器向后兼容旧程序，保留旧release可回滚程序，不应回退来源数据。
+- 13项来源公网/数据库检查通过：鉴权、输入、新用户资格、首次持久化及时间、同值幂等、后续会话重试、冲突不可覆盖、并发、邀请独立性、数据库不可变。既有29项公网检查通过，合成fixture和会话清理回读。
+- 用户授权清理非Let_Go测试账号：删除momo `2bbc5cd1-ca92-4aa3-ab49-aebaa51ffcaa`及1个会话，级联数据清理回读；保留Let_Go `f7803537-906c-4dfe-82ad-cf9c0d19b98e`，操作完成时库内仅该账号。
+- 正式dist、环境配置、Nginx文件哈希及正式进程身份未变。staging active/running、NRestarts=0，进程cwd回读为新release。证据 `tmp/source-scene-deploy/`。公网自动验证不代表真实微信登录/发奖验收。
+
 ## 每日最多领取50份更新（2026-10-17）
 
 - 源代码 `f821c5b` 部署到 `runtime/staging/releases/20261017T093822Z-f821c5b`，只原子切换测试 current 并重启 minigame-staging；无 schema、权限、Nginx 或正式服务变更。
