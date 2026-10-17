@@ -2,7 +2,7 @@
 
 微信小游戏登录服务。NestJS + PostgreSQL + Redis；Node.js 24+，原生 ESM。
 
-当前代码提供微信登录与 JSON 存档保存/获取，不含支付、昵称头像获取、刷新令牌、注销。**微信登录和 JSON 存档接口均已上线，可进行客户端联调。** 存档协议与可选小游戏 SDK 见 [`docs/save-api.md`](docs/save-api.md)；客户端也可自行调用接口。
+当前代码提供微信登录、JSON 存档保存/获取及用户资料/邀请拉新接口，不含支付、刷新令牌、注销；头像昵称由客户端获得授权后上传。**线上已有微信登录与 JSON 存档；本次新增 `user.openid`、`isNewUser` 和资料/邀请功能尚未部署。** 存档协议与可选小游戏 SDK 见 [`docs/save-api.md`](docs/save-api.md)；邀请接入见 [`docs/invite-api.md`](docs/invite-api.md)，客户端可自行调用 HTTPS JSON，无需新增 SDK。
 登录服务已部署至下述 HTTPS 地址。客户端接入文档见 [`docs/wechat-login-api.md`](docs/wechat-login-api.md)，部署与运维见 [`docs/production-operations.md`](docs/production-operations.md)。真实玩家成功登录仍需小游戏新鲜 code 联调。
 
 ## 接口契约
@@ -26,6 +26,7 @@ Content-Type: application/json
   "accessToken": "<服务端生成的随机令牌>",
   "tokenType": "Bearer",
   "expiresIn": 604800,
+  "isNewUser": true,
   "user": {"id": "<用户 UUID>", "openid": "<当前小游戏的微信 openid>"}
 }
 ```
@@ -34,9 +35,10 @@ Content-Type: application/json
 - 多次登录允许多个令牌共存，用户 ID 不变；不是单设备登录/踢下线方案。
 - 存档接口读取 `Authorization: Bearer <accessToken>`，通过令牌摘要查询 Redis 并校验用户/应用归属；HTTPS 下直接收发 JSON，无自定义加密。见存档接入文档，现已发布到生产。
 - `user.openid` 用于客户端展示及平台反馈定位，不代替 Bearer token；新增字段线上生效以部署通知为准。
+- `isNewUser` 来自服务器首次注册判定，仅首次注册会话有未绑定的新用户拉新资格；再次登录不重新授予。分享 query 直接使用 `inviterUid=<user.id>`，无需单独邀请码或获取分享参数接口。
 - 不返回、记录或持久化微信 `session_key`；不返回 AppSecret。
 - 微信校验成功后，PG 以 `(app_id, open_id)` 唯一键原子 upsert 用户，Redis 仅保存随机令牌的 SHA-256 摘要键及会话元信息。
-- PG/Redis 任一失败均不返回令牌。Redis 写入失败时 PG 用户记录可能已创建；重试成功后仍复用同一用户。
+- PG/Redis 任一失败均不返回令牌。首次注册登录通过 PG 事务与 Redis 会话确认协调，Redis 写入失败会回滚用户/首登标记，避免消耗新用户资格。
 - 不自动重试微信换码请求，避免重复消费一次性 code。
 
 错误返回有 `statusCode`、`message`，其中参数校验的 `message` 是字符串数组：
@@ -106,7 +108,7 @@ AppSecret 已在聊天中提供过，生产使用前建议在微信后台重置�
 
 生产数据库应使用独立用户/数据库；不要接入或复用 sub2api 的业务数据。
 迁移显式执行，不在 API 启动时自动建表。迁移在事务和 advisory lock 内执行，并校验已执行文件的 SHA-256，后续通过新增 SQL 文件演进，勿修改已执行迁移。
-建议迁移账号与运行账号分离，运行账号仅授予 `game_users`、`game_saves` 的 SELECT/INSERT/UPDATE 权限。
+建议迁移账号与运行账号分离。现有生产权限为 `game_users`、`game_saves` 的 SELECT/INSERT/UPDATE；资料/邀请版本另需迁移 `003_invites.sql`，并经授权新增 `game_profiles`、`game_invitations` 的同类最小权限，不授予运行账号 DELETE/DDL。
 
 ## 自动测试
 

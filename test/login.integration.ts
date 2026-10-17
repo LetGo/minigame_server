@@ -44,6 +44,7 @@ test('login HTTP flow with real isolated PostgreSQL and Redis (WeChat transport 
     const response = await request(app.getHttpServer()).post(route).send({ code: 'fresh-code' }).expect(200);
     assert.equal(response.body.tokenType, 'Bearer');
     assert.equal(response.body.expiresIn, 604800);
+    assert.equal(response.body.isNewUser, true);
     assert.match(response.body.accessToken, /^[A-Za-z0-9_-]{43}$/);
     assert.match(response.body.user.id, /^[0-9a-f-]{36}$/);
     assert.equal(response.body.user.openid, 'player_one');
@@ -60,6 +61,7 @@ test('login HTTP flow with real isolated PostgreSQL and Redis (WeChat transport 
     const session = JSON.parse((await redis.get(key))!);
     assert.equal(session.userId, response.body.user.id);
     assert.equal(session.appId, config.appId);
+    assert.equal(session.isNewUser, true);
     assert.ok((await redis.ttl(key)) > 604790);
     assert.equal(await redis.exists(`minigame:session:${response.body.accessToken}`), 0);
   });
@@ -69,6 +71,7 @@ test('login HTTP flow with real isolated PostgreSQL and Redis (WeChat transport 
       request(app.getHttpServer()).post(route).send({ code: `concurrent-code-${i}` }).expect(200)));
     assert.equal(new Set(responses.map(r => r.body.user.id)).size, 1);
     assert.ok(responses.every(r => r.body.user.openid === 'player_one'));
+    assert.ok(responses.every(r => r.body.isNewUser === false));
     assert.equal(new Set(responses.map(r => r.body.accessToken)).size, 8);
     assert.equal((await pool.query('SELECT count(*)::int AS n FROM game_users')).rows[0].n, 1);
   });
@@ -137,6 +140,7 @@ test('login HTTP flow with real isolated PostgreSQL and Redis (WeChat transport 
       const response = await request(broken.getHttpServer()).post(route).send({ code: 'write-failure-code' }).expect(503);
       assert.equal(response.body.message, 'LOGIN_STORAGE_UNAVAILABLE');
       assert.equal(response.body.accessToken, undefined);
+      assert.equal((await pool.query('SELECT count(*)::int AS n FROM game_users WHERE open_id=$1', ['post_exchange_outage'])).rows[0].n, 0);
     } finally {
       await broken.close();
     }

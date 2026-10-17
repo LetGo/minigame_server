@@ -12,6 +12,9 @@ import { WechatClient } from './auth/wechat.client.js';
 import { LoginRateGuard } from './auth/login-rate.guard.js';
 import { DataController } from './data/data.controller.js';
 import { DataService } from './data/data.service.js';
+import { InvitesService } from './invites/invites.service.js';
+import { InvitesController } from './invites/invites.controller.js';
+import { ProfileController } from './users/profile.controller.js';
 
 @Catch()
 class SafeExceptionFilter implements ExceptionFilter {
@@ -41,12 +44,13 @@ export async function createApplication(config: AppConfig, overrides: { wechat?:
   try {
     const app = await NestFactory.create<NestExpressApplication>({
       module: AppModule,
-      controllers: [AuthController, DataController],
+      controllers: [AuthController, DataController, InvitesController, ProfileController],
       providers: [
         { provide: Infrastructure, useValue: infrastructure },
         { provide: CONFIG, useValue: config },
         LoginRateGuard,
         { provide: DataService, useValue: new DataService(config, infrastructure) },
+        { provide: InvitesService, useValue: new InvitesService(config, infrastructure) },
         { provide: AuthService, useValue: new AuthService(config, infrastructure, overrides.wechat ?? new WechatClient(config)) },
       ],
     }, { bodyParser: false, logger: ['error', 'warn'], abortOnError: false });
