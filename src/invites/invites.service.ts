@@ -129,18 +129,18 @@ export class InvitesService {
     });
   }
 
-  private cursor(value: unknown): [string, string] | null {
+  private cursor(value: unknown): [boolean, string, string] | null {
     if (value === undefined || value === null) return null;
     try {
       if (typeof value !== 'string' || value.length > 512 || !/^[A-Za-z0-9_-]+$/.test(value)) throw new Error('Invalid cursor');
       const decoded = Buffer.from(value, 'base64url');
       if (decoded.toString('base64url') !== value) throw new Error('Invalid cursor');
       const parsed: unknown = JSON.parse(decoded.toString('utf8'));
-      if (!Array.isArray(parsed) || parsed.length !== 2 || typeof parsed[0] !== 'string'
-        || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(parsed[0]) || parsed[0].startsWith('0000')
-        || typeof parsed[1] !== 'string' || !UUID.test(parsed[1])) throw new Error('Invalid cursor');
-      if (new Date(parsed[0]).toISOString() !== parsed[0].slice(0, 23) + 'Z') throw new Error('Invalid cursor');
-      return [parsed[0], parsed[1]];
+      if (!Array.isArray(parsed) || parsed.length !== 3 || typeof parsed[0] !== 'boolean' || typeof parsed[1] !== 'string'
+        || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(parsed[1]) || parsed[1].startsWith('0000')
+        || typeof parsed[2] !== 'string' || !UUID.test(parsed[2])) throw new Error('Invalid cursor');
+      if (new Date(parsed[1]).toISOString() !== parsed[1].slice(0, 23) + 'Z') throw new Error('Invalid cursor');
+      return [parsed[0], parsed[1], parsed[2]];
     } catch { throw new BadRequestException('INVALID_INVITE_CURSOR'); }
   }
 
@@ -159,14 +159,15 @@ export class InvitesService {
          FROM game_invitations i LEFT JOIN game_profiles p ON p.user_id=i.invitee_user_id
          WHERE i.app_id=$1 AND i.inviter_user_id=$2
        )
-       SELECT COALESCE((SELECT json_agg(paged ORDER BY paged.invited_at DESC,paged.invitee_user_id DESC) FROM (
+       SELECT COALESCE((SELECT json_agg(paged ORDER BY (paged.claim_id IS NOT NULL) ASC,paged.invited_at DESC,paged.invitee_user_id DESC) FROM (
          SELECT owned.*,to_char(invited_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_time
-         FROM owned WHERE $3::timestamptz IS NULL OR (invited_at,invitee_user_id)<($3::timestamptz,$4::uuid)
-         ORDER BY invited_at DESC,invitee_user_id DESC LIMIT $5
+         FROM owned WHERE $3::boolean IS NULL OR (claim_id IS NOT NULL)>$3::boolean
+           OR ((claim_id IS NOT NULL)=$3::boolean AND (invited_at,invitee_user_id)<($4::timestamptz,$5::uuid))
+         ORDER BY (claim_id IS NOT NULL) ASC,invited_at DESC,invitee_user_id DESC LIMIT $6
        ) paged),'[]'::json) AS page,
        (SELECT json_build_object('total',count(*)::int,'claimed',count(claim_id)::int,
          'unclaimed',count(*)::int-count(claim_id)::int) FROM owned) AS summary`,
-      [this.config.appId, userId, cursor?.[0] ?? null, cursor?.[1] ?? null, limit + 1],
+      [this.config.appId, userId, cursor?.[0] ?? null, cursor?.[1] ?? null, cursor?.[2] ?? null, limit + 1],
     ));
     const { page, summary } = result.rows[0]!;
     const displayed = page.slice(0, limit);
@@ -176,7 +177,7 @@ export class InvitesService {
         invitedAt: new Date(row.invited_at).toISOString(), rewardClaimed: row.claim_id !== null,
         rewardClaimedAt: row.reward_claimed_at ? new Date(row.reward_claimed_at).toISOString() : null, claimId: row.claim_id })),
       summary,
-      nextCursor: page.length > limit && last ? Buffer.from(JSON.stringify([last.cursor_time, last.invitee_user_id])).toString('base64url') : null,
+      nextCursor: page.length > limit && last ? Buffer.from(JSON.stringify([last.claim_id !== null, last.cursor_time, last.invitee_user_id])).toString('base64url') : null,
     };
   }
 

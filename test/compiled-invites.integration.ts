@@ -121,6 +121,10 @@ test('compiled referral APIs over real HTTP with least-privilege PG, real Redis 
     });
 
     await t.test('claim via invitee UID is atomic and stable under retries, without server reward payload', async () => {
+      // Make b the latest invite, then verify claiming moves it behind the older unclaimed c.
+      await owner.query('UPDATE game_invitations SET invited_at=$1 WHERE invitee_user_id=$2', ['2026-10-17T04:00:00.123789Z', b.user.id]);
+      await owner.query('UPDATE game_invitations SET invited_at=$1 WHERE invitee_user_id=$2', ['2026-10-17T04:00:00.123456Z', c.user.id]);
+      assert.equal((await call('invites/list', {}, a.accessToken)).items[0].inviteeUid, b.user.id);
       await call('invites/claim', { inviteeUid: b.user.id }, c.accessToken, 404);
       const results = await Promise.all(Array.from({ length: 5 }, () => call('invites/claim', { inviteeUid: b.user.id }, a.accessToken)));
       for (const result of results) {
@@ -132,6 +136,12 @@ test('compiled referral APIs over real HTTP with least-privilege PG, real Redis 
       assert.deepEqual(await call('invites/claim', { inviteeUid: b.user.id }, a.accessToken), results[0]);
       const list = await call('invites/list', {}, a.accessToken);
       assert.deepEqual(list.summary, { total: 2, claimed: 1, unclaimed: 1 });
+      assert.deepEqual(list.items.map((row: any) => row.inviteeUid), [c.user.id, b.user.id]);
+      const first = await call('invites/list', { limit: 1 }, a.accessToken);
+      const second = await call('invites/list', { limit: 1, cursor: first.nextCursor }, a.accessToken);
+      assert.equal(first.items[0].inviteeUid, c.user.id);
+      assert.equal(second.items[0].inviteeUid, b.user.id);
+      assert.equal(second.nextCursor, null);
       const item = list.items.find((row: any) => row.inviteeUid === b.user.id);
       assert.equal(item.claimId, results[0].claimId);
       assert.equal(item.rewardClaimedAt, results[0].rewardClaimedAt);

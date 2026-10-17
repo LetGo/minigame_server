@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { createClient } from 'redis';
 import request from 'supertest';
@@ -117,8 +117,15 @@ test('referral safety, races and failure boundaries with real isolated PostgreSQ
     for (const payload of [{ invitationId: race.user.id }, { inviteeUid: race.user.id, claimed: true }, { inviteeUid: 'bad' }]) {
       await call('invites/claim', fresh.accessToken, payload, 400);
     }
-    const badTimestamp = Buffer.from(JSON.stringify(['2026-02-31T00:00:00.000000Z', fresh.user.id])).toString('base64url');
+    const encodeCursor = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
+    const badTimestamp = encodeCursor([false, '2026-02-31T00:00:00.000000Z', fresh.user.id]);
+    const invalidCursors = [
+      encodeCursor(['2026-10-17T04:00:00.000000Z', fresh.user.id]), // Pre-sort legacy cursor.
+      ...[null, 0, 1, 'false', {}, []].map(state => encodeCursor([state, '2026-10-17T04:00:00.000000Z', fresh.user.id])),
+      encodeCursor([false, '2026-10-17T04:00:00.000000Z', 'invalid-uid']),
+    ];
     for (const payload of [[], { limit: 0 }, { limit: 101 }, { limit: 1.5 }, { limit: '1' }, { cursor: 'not-json' },
+      ...invalidCursors.map(cursor => ({ cursor })),
       { cursor: badTimestamp }, { cursor: 'x'.repeat(513) }, { cursor: 5 }, { inviterUid: a.user.id }]) {
       await call('invites/list', fresh.accessToken, payload, 400);
     }
@@ -140,6 +147,59 @@ test('referral safety, races and failure boundaries with real isolated PostgreSQ
     const second = await call('invites/list', owner.accessToken, { limit: 1, cursor: first.nextCursor });
     assert.deepEqual(new Set([first.items[0].inviteeUid, second.items[0].inviteeUid]), new Set([one.user.id, two.user.id]));
     assert.equal(second.nextCursor, null); assert.deepEqual(second.summary, { total: 2, claimed: 0, unclaimed: 2 });
+  });
+
+  await t.test('unclaimed-first pagination covers over 100 mixed records, timestamp ties and group boundaries', async () => {
+    const owner = await login('unclaimed_first_owner');
+    const fixtures = Array.from({ length: 135 }, (_, index) => ({
+      id: randomUUID(), index, claimed: index >= 110,
+      time: new Date(Date.UTC(2026, 0, 1, 0, 0, Math.floor(index / 3))).toISOString(),
+    }));
+    await pool.query(`INSERT INTO game_users(id,app_id,open_id)
+      SELECT id,$1,'sorting_' || id FROM jsonb_to_recordset($2::jsonb) AS f(id uuid)`, [config.appId, JSON.stringify(fixtures)]);
+    await pool.query(`INSERT INTO game_invitations(app_id,inviter_user_id,invitee_user_id,invited_at,claim_id,reward_claimed_at)
+      SELECT $1,$2,id,time,CASE WHEN claimed THEN gen_random_uuid() END,CASE WHEN claimed THEN now() END
+      FROM jsonb_to_recordset($3::jsonb) AS f(id uuid,time timestamptz,claimed boolean)`,
+    [config.appId, owner.user.id, JSON.stringify(fixtures)]);
+    const expected = [...fixtures].sort((a, b) => Number(a.claimed) - Number(b.claimed)
+      || b.time.localeCompare(a.time) || b.id.localeCompare(a.id));
+    const collected: any[] = [];
+    let cursor = null;
+    const lengths: number[] = [];
+    do {
+      const page = await call('invites/list', owner.accessToken, { limit: 100, cursor });
+      assert.deepEqual(page.summary, { total: 135, claimed: 25, unclaimed: 110 });
+      lengths.push(page.items.length); collected.push(...page.items); cursor = page.nextCursor;
+      assert.ok(lengths.length <= 2, 'pagination must terminate');
+    } while (cursor);
+    assert.deepEqual(lengths, [100, 35]);
+    assert.deepEqual(collected.map(item => item.inviteeUid), expected.map(item => item.id));
+    assert.deepEqual(collected.map(item => item.rewardClaimed), expected.map(item => item.claimed));
+    // Page 2 traverses both groups; a cursor inside the claimed group must also work.
+    const first = await call('invites/list', owner.accessToken, { limit: 100 });
+    const crossing = await call('invites/list', owner.accessToken, { limit: 20, cursor: first.nextCursor });
+    const last = await call('invites/list', owner.accessToken, { limit: 100, cursor: crossing.nextCursor });
+    assert.deepEqual(last.items.map((item: any) => item.inviteeUid), expected.slice(120).map(item => item.id));
+    assert.equal(last.nextCursor, null);
+  });
+
+  await t.test('claiming a cursor row cannot skip remaining unclaimed records; refreshing reorders groups', async () => {
+    const owner = await login('moving_cursor_owner');
+    const one = await login('moving_cursor_one'); const two = await login('moving_cursor_two');
+    for (const player of [one, two]) await call('invites/report', player.accessToken, { inviterUid: owner.user.id });
+    const first = await call('invites/list', owner.accessToken, { limit: 1 });
+    const claimedUid = first.items[0].inviteeUid;
+    const remainingUid = [one.user.id, two.user.id].find(uid => uid !== claimedUid);
+    await call('invites/claim', owner.accessToken, { inviteeUid: claimedUid });
+    const second = await call('invites/list', owner.accessToken, { limit: 1, cursor: first.nextCursor });
+    assert.equal(second.items[0].inviteeUid, remainingUid);
+    assert.equal(second.items[0].rewardClaimed, false);
+    const fresh = await call('invites/list', owner.accessToken, {});
+    assert.deepEqual(fresh.items.map((item: any) => item.inviteeUid), [remainingUid, claimedUid]);
+    assert.deepEqual(fresh.summary, { total: 2, claimed: 1, unclaimed: 1 });
+    // A live traversal may see the moved record again in the claimed group; never skip pending rewards.
+    const third = await call('invites/list', owner.accessToken, { limit: 1, cursor: second.nextCursor });
+    assert.equal(third.items[0].inviteeUid, claimedUid); assert.equal(third.nextCursor, null);
   });
 
   await t.test('DB constraints enforce single inviter, cross-app isolation and coherent claim state', async () => {
