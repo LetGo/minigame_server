@@ -36,6 +36,17 @@ test('referral safety, races and failure boundaries with real isolated PostgreSQ
   async function login(code: string) {
     return (await request(app.getHttpServer()).post(prefix + 'auth/wechat-login').send({ code }).expect(200)).body;
   }
+  async function quotaFixture(code: string, claimed: number, total = 54) {
+    const owner = await login(code);
+    const ids = Array.from({ length: total }, () => randomUUID());
+    await pool.query(`INSERT INTO game_users(id,app_id,open_id)
+      SELECT id,$1,'quota_'||id FROM unnest($2::uuid[]) AS id`, [config.appId, ids]);
+    await pool.query(`INSERT INTO game_invitations(app_id,inviter_user_id,invitee_user_id,claim_id,reward_claimed_at)
+      SELECT $1,$2,id,CASE WHEN n<=$4 THEN gen_random_uuid() END,CASE WHEN n<=$4 THEN clock_timestamp() END
+      FROM unnest($3::uuid[]) WITH ORDINALITY AS f(id,n)`, [config.appId, owner.user.id, ids, claimed]);
+    return { owner, ids };
+  }
+
   const a = await login('inviter_a'); const other = await login('inviter_other');
   let race: any;
   let raceWinner: any;
@@ -200,6 +211,66 @@ test('referral safety, races and failure boundaries with real isolated PostgreSQ
     // A live traversal may see the moved record again in the claimed group; never skip pending rewards.
     const third = await call('invites/list', owner.accessToken, { limit: 1, cursor: second.nextCursor });
     assert.equal(third.items[0].inviteeUid, claimedUid); assert.equal(third.nextCursor, null);
+  });
+
+  await t.test('daily reward claims stop at 50 but retries remain idempotent and denied rows remain pending', async () => {
+    const { owner, ids } = await quotaFixture('daily_quota_owner', 49);
+    const fiftieth = await call('invites/claim', owner.accessToken, { inviteeUid: ids[49] });
+    assert.equal(fiftieth.rewardClaimed, true);
+    const denied = await call('invites/claim', owner.accessToken, { inviteeUid: ids[50] }, 409);
+    assert.equal(denied.message, 'INVITE_DAILY_CLAIM_LIMIT');
+    assert.deepEqual(await call('invites/claim', owner.accessToken, { inviteeUid: ids[49] }), fiftieth);
+    await call('invites/claim', other.accessToken, { inviteeUid: ids[49] }, 404);
+    await call('invites/claim', owner.accessToken, { inviteeUid: randomUUID() }, 404);
+    const stored = (await pool.query('SELECT claim_id,reward_claimed_at FROM game_invitations WHERE invitee_user_id=$1', [ids[50]])).rows[0];
+    assert.deepEqual(stored, { claim_id: null, reward_claimed_at: null });
+    assert.deepEqual((await call('invites/list', owner.accessToken, {})).summary, { total: 54, claimed: 50, unclaimed: 4 });
+  });
+
+  await t.test('concurrent claims across API instances and tokens cannot exceed the last daily slot', async () => {
+    const { owner, ids } = await quotaFixture('daily_concurrent_owner', 49);
+    const secondToken = (await login('daily_concurrent_owner')).accessToken;
+    const secondApp = await createApplication(config, { wechat });
+    await secondApp.listen(0, '127.0.0.1');
+    try {
+      const results = await Promise.all(ids.slice(49).map((id, index) => request((index % 2 ? secondApp : app).getHttpServer())
+        .post(prefix + 'invites/claim').set('Authorization', 'Bearer ' + (index % 2 ? secondToken : owner.accessToken))
+        .send({ inviteeUid: id })));
+      assert.equal(results.filter(r => r.status === 200).length, 1);
+      assert.equal(results.filter(r => r.status === 409 && r.body.message === 'INVITE_DAILY_CLAIM_LIMIT').length, 4);
+      assert.equal((await pool.query('SELECT count(claim_id)::int AS n FROM game_invitations WHERE inviter_user_id=$1', [owner.user.id])).rows[0].n, 50);
+      const winner = results.findIndex(r => r.status === 200);
+      assert.deepEqual(await call('invites/claim', secondToken, { inviteeUid: ids[49 + winner] }), results[winner]!.body);
+    } finally { await secondApp.close(); }
+    // Another inviter has an independent daily allowance.
+    const independent = await quotaFixture('daily_independent_owner', 0, 1);
+    assert.equal((await call('invites/claim', independent.owner.accessToken, { inviteeUid: independent.ids[0] })).rewardClaimed, true);
+  });
+
+  await t.test('daily quota uses Beijing midnight inclusive and next midnight exclusive, not UTC midnight', async () => {
+    const { owner, ids } = await quotaFixture('daily_timezone_owner', 50);
+    await pool.query(`UPDATE game_invitations SET reward_claimed_at=
+      ((clock_timestamp() AT TIME ZONE 'Asia/Shanghai')::date)::timestamp AT TIME ZONE 'Asia/Shanghai'
+      WHERE inviter_user_id=$1 AND claim_id IS NOT NULL`, [owner.user.id]);
+    await pool.query(`UPDATE game_invitations SET reward_claimed_at=reward_claimed_at - interval '1 microsecond' WHERE invitee_user_id=$1`, [ids[48]]);
+    await pool.query(`UPDATE game_invitations SET reward_claimed_at=reward_claimed_at + interval '1 day' WHERE invitee_user_id=$1`, [ids[49]]);
+    // 48 at today's Beijing midnight count; the previous/next day records do not.
+    await call('invites/claim', owner.accessToken, { inviteeUid: ids[50] });
+    await call('invites/claim', owner.accessToken, { inviteeUid: ids[51] });
+    assert.equal((await call('invites/claim', owner.accessToken, { inviteeUid: ids[52] }, 409)).message, 'INVITE_DAILY_CLAIM_LIMIT');
+    assert.equal((await call('invites/claim', owner.accessToken, { inviteeUid: ids[48] })).rewardClaimed, true);
+  });
+
+  await t.test('50 previous-day claims leave today free for pending rewards without resetting old receipts', async () => {
+    const { owner, ids } = await quotaFixture('daily_next_day_owner', 50);
+    await pool.query(`UPDATE game_invitations SET reward_claimed_at=
+      (((clock_timestamp() AT TIME ZONE 'Asia/Shanghai')::date)::timestamp AT TIME ZONE 'Asia/Shanghai') - interval '1 microsecond'
+      WHERE inviter_user_id=$1 AND claim_id IS NOT NULL`, [owner.user.id]);
+    const previous = (await pool.query('SELECT claim_id,reward_claimed_at FROM game_invitations WHERE invitee_user_id=$1', [ids[0]])).rows[0];
+    const pending = await call('invites/claim', owner.accessToken, { inviteeUid: ids[50] });
+    assert.equal(pending.rewardClaimed, true);
+    const retry = await call('invites/claim', owner.accessToken, { inviteeUid: ids[0] });
+    assert.equal(retry.claimId, previous.claim_id); assert.equal(retry.rewardClaimedAt, previous.reward_claimed_at.toISOString());
   });
 
   await t.test('DB constraints enforce single inviter, cross-app isolation and coherent claim state', async () => {

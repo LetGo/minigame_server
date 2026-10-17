@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { BadRequestException, HttpException, NotFoundException, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, HttpException, NotFoundException, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { Request } from 'express';
 import { PoolClient } from 'pg';
 import { AppConfig } from '../config.js';
@@ -184,12 +184,35 @@ export class InvitesService {
   async claim(request: Request) {
     const { userId } = await this.session(request);
     const inviteeUid = this.uid(this.body(request, ['inviteeUid'], ['inviteeUid']).inviteeUid);
-    const result = await this.database(() => this.infrastructure.pool.query<{ claim_id: string; reward_claimed_at: Date }>(
-      `UPDATE game_invitations SET claim_id=COALESCE(claim_id,gen_random_uuid()),reward_claimed_at=COALESCE(reward_claimed_at,now())
-       WHERE app_id=$1 AND inviter_user_id=$2 AND invitee_user_id=$3 RETURNING claim_id,reward_claimed_at`,
-      [this.config.appId, userId, inviteeUid]));
-    const row = result.rows[0];
-    if (!row) throw new NotFoundException('INVITATION_NOT_FOUND');
+    const row = await this.transaction(async client => {
+      // Serialize every claim for this inviter across sessions/processes, not just this invitee.
+      const owner = await client.query('SELECT id FROM game_users WHERE app_id=$1 AND id=$2 FOR UPDATE', [this.config.appId, userId]);
+      if (!owner.rowCount) throw new UnauthorizedException('SESSION_INVALID');
+      const existing = await client.query<{ claim_id: string | null; reward_claimed_at: Date | null }>(
+        'SELECT claim_id,reward_claimed_at FROM game_invitations WHERE app_id=$1 AND inviter_user_id=$2 AND invitee_user_id=$3',
+        [this.config.appId, userId, inviteeUid]);
+      const invitation = existing.rows[0];
+      if (!invitation) throw new NotFoundException('INVITATION_NOT_FOUND');
+      // A retry returns the original receipt even when today's quota is already exhausted.
+      if (invitation.claim_id !== null) return { claim_id: invitation.claim_id, reward_claimed_at: invitation.reward_claimed_at! };
+      // Capture DB wall time AFTER acquiring the inviter lock; count and write against that same day.
+      const quota = await client.query<{ claim_time: string; claimed: number }>(
+        `WITH moment AS MATERIALIZED (SELECT clock_timestamp() AS claim_time), bounds AS (
+           SELECT claim_time,
+             ((claim_time AT TIME ZONE 'Asia/Shanghai')::date)::timestamp AT TIME ZONE 'Asia/Shanghai' AS day_start,
+             (((claim_time AT TIME ZONE 'Asia/Shanghai')::date + 1)::timestamp AT TIME ZONE 'Asia/Shanghai') AS day_end
+           FROM moment
+         ) SELECT claim_time::text, (SELECT count(*)::int FROM game_invitations
+           WHERE app_id=$1 AND inviter_user_id=$2 AND reward_claimed_at>=bounds.day_start AND reward_claimed_at<bounds.day_end) AS claimed
+         FROM bounds`, [this.config.appId, userId]);
+      const { claim_time, claimed } = quota.rows[0]!;
+      if (claimed >= 50) throw new ConflictException('INVITE_DAILY_CLAIM_LIMIT');
+      const result = await client.query<{ claim_id: string; reward_claimed_at: Date }>(
+        `UPDATE game_invitations SET claim_id=gen_random_uuid(),reward_claimed_at=$4::timestamptz
+         WHERE app_id=$1 AND inviter_user_id=$2 AND invitee_user_id=$3 RETURNING claim_id,reward_claimed_at`,
+        [this.config.appId, userId, inviteeUid, claim_time]);
+      return result.rows[0]!;
+    });
     return { claimId: row.claim_id, rewardClaimed: true, rewardClaimedAt: row.reward_claimed_at.toISOString() };
   }
 }

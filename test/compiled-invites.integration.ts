@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Pool } from 'pg';
@@ -146,6 +146,22 @@ test('compiled referral APIs over real HTTP with least-privilege PG, real Redis 
       assert.equal(item.claimId, results[0].claimId);
       assert.equal(item.rewardClaimedAt, results[0].rewardClaimedAt);
       assert.equal((await call('invites/report', { inviterUid: a.user.id }, b.accessToken)).rewardClaimed, true);
+    });
+
+    await t.test('compiled least-privilege HTTP enforces 50 daily claims and preserves retry receipts at the cap', async () => {
+      const inviter = await login('daily_compiled_' + role);
+      const ids = Array.from({ length: 52 }, () => randomUUID());
+      await owner.query(`INSERT INTO game_users(id,app_id,open_id) SELECT id,$1,'daily_compiled_'||id FROM unnest($2::uuid[]) AS id`, [appId, ids]);
+      await owner.query(`INSERT INTO game_invitations(app_id,inviter_user_id,invitee_user_id,claim_id,reward_claimed_at)
+        SELECT $1,$2,id,CASE WHEN n<=49 THEN gen_random_uuid() END,CASE WHEN n<=49 THEN clock_timestamp() END
+        FROM unnest($3::uuid[]) WITH ORDINALITY AS f(id,n)`, [appId, inviter.user.id, ids]);
+      const receipt = await call('invites/claim', { inviteeUid: ids[49] }, inviter.accessToken);
+      assert.equal(receipt.rewardClaimed, true);
+      assert.equal((await call('invites/claim', { inviteeUid: ids[50] }, inviter.accessToken, 409)).message, 'INVITE_DAILY_CLAIM_LIMIT');
+      assert.deepEqual(await call('invites/claim', { inviteeUid: ids[49] }, inviter.accessToken), receipt);
+      const list = await call('invites/list', {}, inviter.accessToken);
+      assert.deepEqual(list.summary, { total: 52, claimed: 50, unclaimed: 2 });
+      assert.ok(list.items.slice(0, 2).every((row: any) => row.rewardClaimed === false));
     });
 
     await t.test('cross-app UID cannot become inviter and cloud-save API remains compatible', async () => {
