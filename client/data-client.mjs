@@ -2,7 +2,7 @@
 export function createDataClient({ wx, accessToken, baseUrl = 'https://sub2api.wdaveh5game.com/h5login' }) {
   if (typeof accessToken !== 'string' || !/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/.test(accessToken) ||
       !wx || typeof wx.request !== 'function' || typeof baseUrl !== 'string' ||
-      !/^https:\/\/[a-z0-9.-]+(?::\d+)?\/h5login$/i.test(baseUrl)) {
+      !/^https:\/\/[a-z0-9.-]+(?::\d+)?\/h5login(?:-test)?$/i.test(baseUrl)) {
     throw new Error('INVALID_CLIENT_OPTIONS');
   }
 

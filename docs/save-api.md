@@ -4,7 +4,7 @@
 
 ## 接口与鉴权
 
-基础地址：`https://sub2api.wdaveh5game.com/h5login`
+正式基础地址：`https://sub2api.wdaveh5game.com/h5login`。测试基础地址：`https://sub2api.wdaveh5game.com/h5login-test`（2026-10-17 已部署，环境数据独立；见 `staging-integration.md`）。
 
 | 操作 | 方法 | 路径 |
 |---|---|---|
@@ -91,6 +91,8 @@ async function initCloudSave() {
 // const cloud = await initCloudSave();
 // await cloud.saveCurrentGame(JSON原文字符串);
 ```
+
+测试环境使用最新版可选 SDK，并显式传 `baseUrl: 'https://sub2api.wdaveh5game.com/h5login-test'`（不含 `/api`）；默认仍为正式环境。测试 token 与正式 token 不互通，缓存需分环境保存。旧版 SDK 的固定路径校验不接受测试前缀，应替换新版文件或直接调用 HTTPS JSON。
 
 同一客户端保存期间应防止并发调用。SDK 不自动重试；超时可能发生在服务器已保存后，先 get 确认内容和版本，再决定下一步。遇到 409 也应 get 后由业务决定合并或提示，不自动强行覆盖。
 

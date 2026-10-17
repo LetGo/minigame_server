@@ -2,8 +2,12 @@
 
 微信小游戏登录服务。NestJS + PostgreSQL + Redis；Node.js 24+，原生 ESM。
 
-当前代码提供微信登录、JSON 存档保存/获取及用户资料/邀请拉新接口，不含支付、刷新令牌、注销；头像昵称由客户端获得授权后上传。**线上已有微信登录与 JSON 存档；本次新增 `user.openid`、`isNewUser` 和资料/邀请功能尚未部署。** 存档协议与可选小游戏 SDK 见 [`docs/save-api.md`](docs/save-api.md)；邀请接入见 [`docs/invite-api.md`](docs/invite-api.md)，客户端可自行调用 HTTPS JSON，无需新增 SDK。
+当前代码提供微信登录、JSON 存档保存/获取及用户资料/邀请拉新接口，不含支付、刷新令牌、注销；头像昵称由客户端获得授权后上传。**正式环境已有微信登录与 JSON 存档；最新 `user.openid`、`isNewUser` 和资料/邀请功能已部署独立测试环境，正式环境尚未发布。** 存档协议与可选小游戏 SDK 见 [`docs/save-api.md`](docs/save-api.md)；邀请接入见 [`docs/invite-api.md`](docs/invite-api.md)，客户端可自行调用 HTTPS JSON，无需新增 SDK。
 登录服务已部署至下述 HTTPS 地址。客户端接入文档见 [`docs/wechat-login-api.md`](docs/wechat-login-api.md)，部署与运维见 [`docs/production-operations.md`](docs/production-operations.md)。真实玩家成功登录仍需小游戏新鲜 code 联调。
+
+## 常驻测试环境
+
+测试 API 前缀：`https://sub2api.wdaveh5game.com/h5login-test/api`。前端先看 [`docs/staging-integration.md`](docs/staging-integration.md)，运维见 [`docs/staging-operations.md`](docs/staging-operations.md)。测试与正式的用户、会话、存档和邀请数据独立，客户端缓存也必须分开。
 
 ## 接口契约
 

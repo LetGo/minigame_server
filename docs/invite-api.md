@@ -1,6 +1,6 @@
 # 小游戏邀请拉新接口
 
-**发布状态：本次开发版本，尚未部署。** 线上生效须另行迁移、授权、发布；不能因本文存在就让线上客户端启用。
+**发布状态：2026-10-17 已部署测试环境，正式环境尚未发布。** 前端联调使用 `https://sub2api.wdaveh5game.com/h5login-test/api`，见 [`staging-integration.md`](staging-integration.md)。正式发布仍须另行授权。
 
 ## 1. 已确认规则
 

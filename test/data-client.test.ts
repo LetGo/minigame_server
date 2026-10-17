@@ -58,6 +58,22 @@ test('client requires valid Bearer token and HTTPS and accepts a custom HTTPS ho
   assert.doesNotThrow(()=>createDataClient({wx,accessToken:token,baseUrl:'https://other.example:8443/h5login'}));
 });
 
+test('client explicitly routes source and bundled SDK to isolated staging prefix', async () => {
+  const bundle=await build({entryPoints:['client/data-client.mjs'],bundle:true,platform:'browser',format:'cjs',target:'es2020',write:false});
+  const mod={exports:{} as any};
+  runInNewContext(bundle.outputFiles[0]!.text,{module:mod,exports:mod.exports});
+  for (const factory of [createDataClient,mod.exports.createDataClient]) {
+    const urls:string[]=[];
+    const wx={request(o:any){urls.push(o.url);o.success({statusCode:200,data:{exists:false,version:0,data:null,updatedAt:null}});}};
+    const client=factory({wx,accessToken:token,baseUrl:'https://sub2api.wdaveh5game.com/h5login-test'});
+    assert.equal((await client.get()).exists,false);
+    assert.deepEqual(urls,['https://sub2api.wdaveh5game.com/h5login-test/api/data/get']);
+    for (const suffix of ['/h5login-test/extra','/h5login-test?env=prod','/h5login-test-other']) {
+      assert.throws(()=>factory({wx,accessToken:token,baseUrl:'https://sub2api.wdaveh5game.com'+suffix}),/INVALID_CLIENT_OPTIONS/);
+    }
+  }
+});
+
 test('client exposes API errors and Retry-After, handles proxy/network errors, never automatically retries', async () => {
   for (const header of [{'Retry-After':'12'},{'retry-after':'12'}]) {
     let calls=0;

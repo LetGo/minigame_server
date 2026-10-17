@@ -1,0 +1,16 @@
+[Unit]
+Description=Minigame STAGING dedicated PostgreSQL and Redis
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/ubuntu/.hermes/workspace/projects/minigame_server
+ExecStart=/usr/bin/docker compose --env-file .env.staging.infrastructure -p minigame-staging -f compose.staging.yaml up -d --wait
+TimeoutStartSec=180
+# Stopping API does not stop or delete persistent staging storage.
+
+[Install]
+WantedBy=multi-user.target

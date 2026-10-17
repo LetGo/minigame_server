@@ -1,0 +1,32 @@
+[Unit]
+Description=Minigame STAGING WeChat API (not production)
+Requires=minigame-staging-infrastructure.service
+After=minigame-staging-infrastructure.service network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/.hermes/workspace/projects/minigame_server/runtime/staging/current
+ExecStart=/usr/bin/node --env-file=/home/ubuntu/.hermes/workspace/projects/minigame_server/.env.staging dist/main.js
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+UMask=0077
+MemoryMax=384M
+CPUQuota=50%
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

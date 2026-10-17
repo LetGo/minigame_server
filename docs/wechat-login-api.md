@@ -6,7 +6,7 @@
 
 微信小游戏后台的 **request 合法域名**配置为：`https://sub2api.wdaveh5game.com`（不带路径）。客户端调用 `wx.login()` 获取当前小游戏的新鲜 code，然后提交本接口。AppSecret 仅在服务端保存，客户端不需要也不得携带。
 
-本文为已实现的接口契约；接口是否已上线以本次部署完成通知为准。
+测试环境已部署完整契约，测试登录地址为 `https://sub2api.wdaveh5game.com/h5login-test/api/auth/wechat-login`，见 [`staging-integration.md`](staging-integration.md)。正式环境的登录新增字段仍未发布；下方示例在测试时统一替换为测试前缀。
 
 ## 2. 请求
 
@@ -39,7 +39,7 @@ HTTP **200**，`Cache-Control: no-store`。以下仅为结构示例：
 - 多次登录允许多个 token 并存，不会自动踢掉其他设备。
 - 令牌为敏感凭据，不得打印日志、放进 URL 或对外分享。到期、会话失效后重新登录。
 - 不返回微信 session_key 或 AppSecret。新增 `user.openid`、`isNewUser` 及邀请/资料接口的线上生效时间以部署通知为准，本次开发不代表已部署。
-线上已有登录与 JSON 存档读写，见 [`save-api.md`](save-api.md)。本次新增用户资料与邀请接口见 [`invite-api.md`](invite-api.md)，尚未部署。尚无刷新令牌、注销或 token 校验查询接口。
+线上已有登录与 JSON 存档读写，见 [`save-api.md`](save-api.md)。本次新增用户资料与邀请接口见 [`invite-api.md`](invite-api.md)，已部署测试环境，正式环境尚未发布。尚无刷新令牌、注销或 token 校验查询接口。
 
 ## 4. 错误处理
 
