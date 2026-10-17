@@ -30,6 +30,16 @@
 - HTML/API 禁缓存，API 不启用跨域；固定 CSP、不允许内联脚本。Nginx 此路由关闭 access log/mirror；应用不记录请求正文、密码、token、openid 或存档。
 - 发布 snapshot：`runtime/dashboard/releases/<time>-<gitsha>`，`current` 指向实际运行版本；源码目录编辑不直接改变线上后台。原游戏 `dist` 切换另留旧产物。
 
+## 已授权正式发布（2026-10-17，北京时间）
+
+- 用户确认成功登录去重的活跃口径并授权正式上线。功能提交 `6600d3f`；后台运行快照 `runtime/dashboard/releases/20261017T155816Z-6600d3f`。
+- owner 已执行迁移 005，游戏 runtime 仅增逐日表 SELECT/INSERT，后台使用 `minigame_dashboard_app` 只读角色和独立 Redis DB1。
+- `minigame-login` 重启一次；`minigame-dashboard` 已启用开机启动；共享 Nginx 仅新增已标记后台 include。常驻测试进程/产物、原有配置及旧迁移逐项验证未变。
+- 发布前备份已实际恢复至 scratch DB 并删除 scratch；原有 4 用户、1 存档及来源信息保留。备份 `/var/backups/minigame-server/minigame-20261017T155841993354Z.dump`，仅本机备份。
+- 18 单测、6 后台、76 集成、2 运维测试通过，依赖 audit 0。正式 HTTPS 26 项鉴权/指标/精确玩家原始存档/退出检查通过；公开前端 DOM 10 项登录、14 日表、查询、复制、下载及退出验收通过（非真实浏览器，不代替真机验收）。测试 HTTPS 29 项回归及关联旧站点检查通过。
+- 证据 `tmp/dashboard-rollout/{verification,backup,db-after,public-smoke,public-dom,staging-public}.json`。临时预览进程及一次性测试 Compose 已停止；正式、常驻测试服务保留。
+- 管理员凭据仅位于已忽略的 0600 `.env.dashboard.access`；不写进本文、提交或公开 URL。未来更改/部署仍需逐次授权。
+
 ## 发布/恢复注意事项
 
 发布须获用户明确授权。先全量测试、独立审查、正式备份及临时库实际恢复验证；再用生产 owner 执行 `node ops/dashboard-admin.mjs prepare`（迁移、最小权限及首次凭据生成），切换正式游戏 API 和后台服务；健康后安装 Nginx 路由并 `nginx -t`/reload，最后实际 HTTPS 登录/查询/退出及数据库回读。
