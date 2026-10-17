@@ -40,6 +40,15 @@ sudo docker compose --env-file .env.staging.infrastructure -p minigame-staging -
 
 若Redis长时间断连导致重连耗尽，恢复存储后仅重启staging API；不因测试环境问题重启正式服务。Redis noeviction有意在内存不足时报错，不以驱逐会话掩盖容量问题。
 
+## 未领取优先更新（2026-10-17）
+
+- 按明确授权仅部署测试服务，源代码 `749695f`；发布快照 `runtime/staging/releases/20261017T084529Z-749695f`。旧快照保留用于回滚。
+- 独立候选构建与 `npm ci --omit=dev --ignore-scripts` 后原子切换 current，仅重启 `minigame-staging`；迁移文件与旧发布逐字节一致，无 schema 迁移，无 Nginx 改动。
+- 公网验证 135 条临时邀请（110未领取/25已领取）按100+35分页，包含相同时间UID排序、领取分组游标、领取后刷新排序、重复领取凭据与旧游标400；自身合成账号、会话和数据均清理回读。
+- 既有29项公网检查全部通过；当前进程cwd回读指向新快照，active且NRestarts=0，开机启动保持启用。正式dist/.env哈希、正式API PID/启动时间与发布前一致。
+- 新排序游标不兼容旧版；前端收到 INVALID_INVITE_CURSOR 或成功领取后，清空旧分页并从首页刷新。实时领取可能导致旧遍历中已领取记录重复，按 inviteeUid 合并、按 claimId 发奖去重。
+- 完整发布证据：`tmp/unclaimed-first-deploy/verification.json`。合成会话验证不代表真实微信成功登录/分享卡片验收。
+
 ## 首次部署验收（2026-10-17）
 
 - 常驻测试库迁移001/002/003，受限runtime权限回读通过；独立数据库、Redis和API正常，两个staging unit已设开机启动。
