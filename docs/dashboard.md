@@ -8,6 +8,7 @@
 - **今日活跃**：今天成功完成游戏登录的用户去重。仅持旧 token 拉取/保存存档、上报 scene 或查邀请不算登录活跃；不是在线人数。
 - **今日新注册**：注册时间落在今天、首次登录已成功完成的用户。
 - **今日邀请新注册 / 每日其中邀请注册**：上述新注册用户中，已存在本游戏成功绑定邀请关系的去重人数；按注册日期（北京时间）归属，不按绑定/领奖日期计数，与是否领奖无关。延迟绑定会在下一次刷新补到原注册日；尚未上报绑定的用户暂不计入，剩余人数不能直接当作确定的自然新增。卡片同时显示占今日新注册比例，分母为 0 显示“—”。现有表只读查询，无需迁移或改游戏 API。
+- **累计激励视频次数（新版本，待部署）**：本游戏已成功保存的完整观看上报事件总条数，覆盖全部日期、点位及玩家；同一玩家同一事件 ID 仅计一次，不是观看去重人数或广告平台核验数据。客户端接入后才开始累计，不补造历史。详见 [`rewarded-video-api.md`](rewarded-video-api.md)。迁移 006 与新表只读授权必须先于 dashboard 新版本发布；累计数为当前存储事件数，删除玩家将级联移除其事件。
 - **实时次留**：昨日新注册用户中，今天已经成功登录的用户数 ÷ 昨日新注册人数。当天持续变化，不是最终整日次留。分母为 0 显示“—”。
 - 最近 14 天按“回访日”展示新增、活跃和前一日新用户次留。今天标记“截至现在”。页面每 30 秒刷新，隐藏页面暂停轮询。
 - `005_daily_logins.sql` 建立逐日登录表。上线当日用用户现有 `last_login_at` 补录当日已登录用户，**不使用最后登录时间反推更早每日活跃**。覆盖日期前的 DAU/留存显示“—”；历史注册数仍可查询。覆盖日期由数据库记录，非前端猜测。
@@ -25,7 +26,7 @@
 
 - 后台 `minigame-dashboard.service` 独立运行，仅监听 `127.0.0.1:18742`，由 Nginx HTTPS `/h5dashboard/` 代理。
 - `.env.dashboard` 仅 0600，存独立 `minigame_dashboard_app` 只读 DB 连接、管理员 scrypt 哈希和 Redis DB1 连接；不得提交或回显。独立管理员访问资料 `.env.dashboard.access` 也仅 0600，不做 Web 静态文件。
-- 数据库角色仅获 6 张指定业务表 SELECT，默认只读事务。游戏 runtime 仅新增 `game_daily_logins` 的 SELECT/INSERT（Postgres `ON CONFLICT` 需要 SELECT），无该表 UPDATE/DELETE；不对旧表扩权。
+- 数据库角色已发布版本仅获 6 张指定业务表 SELECT，默认只读事务；激励视频版本额外仅授予 `game_rewarded_video_events` SELECT。游戏 runtime 对新事件表只授 SELECT/INSERT，无 UPDATE/DELETE。游戏 runtime 仅新增 `game_daily_logins` 的 SELECT/INSERT（Postgres `ON CONFLICT` 需要 SELECT），无该表 UPDATE/DELETE；不对旧表扩权。
 - 随机 256 位会话 token，Redis 只保存其 SHA-256 摘要，8 小时过期。Cookie `Secure; HttpOnly; SameSite=Strict; Path=/h5dashboard/`。退出删除服务端会话。
 - 写方法仅精确接受本站 Origin、普通 JSON；登录限流使用 Redis 原子 INCR/EXPIRE，仅信任本机代理提供的真实 IP，密码校验最多并发两份。限流/存储失败闭锁。
 - HTML/API 禁缓存，API 不启用跨域；固定 CSP、不允许内联脚本。Nginx 此路由关闭 access log/mirror；应用不记录请求正文、密码、token、openid 或存档。

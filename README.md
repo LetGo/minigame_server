@@ -5,6 +5,8 @@
 当前代码提供微信登录、JSON 存档保存/获取及用户资料/邀请拉新接口，不含支付、刷新令牌、注销；头像昵称由客户端获得授权后上传。**微信登录、存档、`user.openid`、`isNewUser`、资料、邀请及首次来源 scene 已部署正式环境与独立测试环境。** 存档协议与可选小游戏 SDK 见 [`docs/save-api.md`](docs/save-api.md)；邀请接入见 [`docs/invite-api.md`](docs/invite-api.md)，客户端可自行调用 HTTPS JSON，无需新增 SDK。
 
 新增独立登录的只读运营后台：今日登录活跃、新注册、实时次留、openid 玩家/原始存档查询。统计口径、安全及运维见 [`docs/dashboard.md`](docs/dashboard.md)。
+
+开发中新增：激励视频完整观看上报（点位、会话玩家 UID、服务端记录时间、客户端 JSON 信息）及 dashboard 累计次数。接入、幂等规则和部署前置条件见 [`docs/rewarded-video-api.md`](docs/rewarded-video-api.md)。**该新功能尚未发布正式或常驻测试环境，不影响已上线接口。**
 登录服务已部署至下述 HTTPS 地址。客户端接入文档见 [`docs/wechat-login-api.md`](docs/wechat-login-api.md)，部署与运维见 [`docs/production-operations.md`](docs/production-operations.md)。真实玩家成功登录仍需小游戏新鲜 code 联调。
 
 ## 常驻测试环境

@@ -71,6 +71,9 @@ async function main() {
     await pool.query('GRANT CONNECT ON DATABASE minigame_staging TO minigame_staging_app');
     await pool.query('GRANT USAGE ON SCHEMA public TO minigame_staging_app');
     await pool.query('GRANT SELECT, INSERT, UPDATE ON game_users, game_saves, game_profiles, game_invitations TO minigame_staging_app');
+    if ((await pool.query("SELECT to_regclass('public.game_rewarded_video_events') AS table_name")).rows[0].table_name) {
+      await pool.query('GRANT SELECT, INSERT ON game_rewarded_video_events TO minigame_staging_app');
+    }
     const migrations = await pool.query('SELECT name FROM schema_migrations ORDER BY name');
     console.log(JSON.stringify({ staging_migrations: migrations.rows.map(row => row.name) }));
   } finally { await pool.end(); }
