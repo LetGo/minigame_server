@@ -55,6 +55,29 @@ test('compiled referral APIs over real HTTP with least-privilege PG, real Redis 
     assert.equal(b.isNewUser, true);
     assert.equal(c.isNewUser, true);
 
+    await t.test('compiled source scene report persists first-registration attribution with restricted runtime role', async () => {
+      const actor = await login('source_scene_compiled_' + role);
+      const result = await call('users/source-scene', { scene: 1007 }, actor.accessToken);
+      assert.deepEqual(Object.keys(result).sort(), ['alreadyRecorded', 'reportedAt', 'scene']);
+      assert.equal(result.scene, 1007);
+      assert.equal(result.alreadyRecorded, false);
+      assert.equal(new Date(result.reportedAt).toISOString(), result.reportedAt);
+      const row = (await owner.query('SELECT source_scene,source_scene_reported_at FROM game_users WHERE id=$1', [actor.user.id])).rows[0];
+      assert.equal(row.source_scene, 1007);
+      assert.equal(row.source_scene_reported_at.toISOString(), result.reportedAt);
+      const later = await login('source_scene_compiled_' + role);
+      assert.equal(later.isNewUser, false);
+      assert.deepEqual(await call('users/source-scene', { scene: 1007 }, later.accessToken), { ...result, alreadyRecorded: true });
+      assert.equal((await call('users/source-scene', { scene: 1008 }, later.accessToken, 409)).message, 'SOURCE_SCENE_ALREADY_RECORDED');
+      await call('users/source-scene', { scene: 1007 }, undefined, 401);
+      await call('users/source-scene', { scene: 1007, userId: a.user.id }, actor.accessToken, 400);
+      const late = await login('source_scene_old_' + role);
+      const lateAgain = await login('source_scene_old_' + role);
+      assert.equal(lateAgain.isNewUser, false);
+      assert.equal((await call('users/source-scene', { scene: 1007 }, lateAgain.accessToken, 403)).message, 'SOURCE_SCENE_NOT_NEW_USER');
+      assert.equal((await call('users/source-scene', { scene: 1007 }, late.accessToken)).alreadyRecorded, false);
+    });
+
     await t.test('first-registration eligibility is server-side; legacy and repeated logins are not new', async () => {
       const repeat = await login('invitee_one_' + role);
       assert.equal(repeat.isNewUser, false);

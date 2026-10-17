@@ -6,6 +6,11 @@ import { InvitesService } from '../invites/invites.service.js';
 export class ProfileController {
   constructor(@Inject(InvitesService) private readonly invites: InvitesService) {}
 
+  @Post('source-scene')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  sourceScene(@Req() request: Request) { return this.invites.sourceScene(request); }
+
   @Post('profile')
   @HttpCode(200)
   @Header('Cache-Control', 'no-store')

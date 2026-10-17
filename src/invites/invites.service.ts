@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { BadRequestException, ConflictException, HttpException, NotFoundException, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, HttpException, NotFoundException, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { Request } from 'express';
 import { PoolClient } from 'pg';
 import { AppConfig } from '../config.js';
@@ -81,6 +81,33 @@ export class InvitesService {
   private uid(value: unknown): string {
     if (typeof value !== 'string' || !UUID.test(value)) throw new BadRequestException('INVALID_INVITE_REQUEST');
     return value;
+  }
+
+  async sourceScene(request: Request) {
+    const actor = await this.session(request);
+    const { scene } = this.body(request, ['scene'], ['scene']);
+    if (typeof scene !== 'number' || !Number.isInteger(scene) || scene < 1 || scene > 2147483647) {
+      throw new BadRequestException('INVALID_SOURCE_SCENE');
+    }
+    return this.transaction(async client => {
+      const locked = await client.query<{ source_scene: number | null; source_scene_reported_at: Date | null }>(
+        'SELECT source_scene,source_scene_reported_at FROM game_users WHERE id=$1 AND app_id=$2 FOR UPDATE',
+        [actor.userId, this.config.appId]);
+      const user = locked.rows[0];
+      if (!user) throw new UnauthorizedException('SESSION_INVALID');
+      // Return the original receipt before the eligibility check, including later-session retries.
+      if (user.source_scene !== null) {
+        if (user.source_scene !== scene) throw new ConflictException('SOURCE_SCENE_ALREADY_RECORDED');
+        return { scene: user.source_scene, reportedAt: user.source_scene_reported_at!.toISOString(), alreadyRecorded: true };
+      }
+      if (!actor.isNewUser) throw new ForbiddenException('SOURCE_SCENE_NOT_NEW_USER');
+      const saved = await client.query<{ source_scene: number; source_scene_reported_at: Date }>(
+        `UPDATE game_users SET source_scene=$1,source_scene_reported_at=clock_timestamp()
+         WHERE id=$2 AND app_id=$3 RETURNING source_scene,source_scene_reported_at`,
+        [scene, actor.userId, this.config.appId]);
+      const row = saved.rows[0]!;
+      return { scene: row.source_scene, reportedAt: row.source_scene_reported_at.toISOString(), alreadyRecorded: false };
+    });
   }
 
   async profile(request: Request) {
