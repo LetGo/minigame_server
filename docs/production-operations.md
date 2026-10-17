@@ -5,7 +5,7 @@
 - 入口：`https://sub2api.wdaveh5game.com/h5login/api/auth/wechat-login`，POST JSON。
 - API：`minigame-login.service`，ubuntu 用户，`127.0.0.1:18740`，512 MiB 内存上限、1 CPU 配额、异常自动重启、开机启动。
 - 存储：独立 Compose 项目 `minigame-prod`，`compose.production.yaml`。PostgreSQL 18、Redis 8 镜像按当前已安装镜像 digest 固定，不跟随 latest 自动升级。
-- PostgreSQL：`127.0.0.1:15440`，数据库 `minigame`。管理员 `minigame_owner` 负责迁移；运行用户 `minigame_app` 仅有用户表及存档表 SELECT/INSERT/UPDATE，无建库、建角色、超级用户、DELETE 或迁移表访问权限。
+- PostgreSQL：`127.0.0.1:15440`，数据库 `minigame`。管理员 `minigame_owner` 负责迁移；运行用户 `minigame_app` 仅有用户、存档、资料、邀请四表 SELECT/INSERT/UPDATE，无建库、建角色、超级用户、DELETE 或迁移表访问权限。
 - Redis：`127.0.0.1:16390`，独立密码、AOF everysec、96 MiB maxmemory/noeviction。Redis 内存不足时登录会失败而非悄悄驱逐会话，需要监控并扩容。令牌到期/会话丢失需重新登录。
 - 存储均为命名卷，非测试 tmpfs；容器资源上限为 PG 768 MiB、Redis 192 MiB。禁止 `docker compose down -v`，避免删除生产数据。
 - `minigame-infrastructure.service` 管理基础设施开机启动；容器自身配置 unless-stopped。停止 API 不会停止数据库。
@@ -82,11 +82,22 @@ Redis 客户端只有限次重连；若 Redis 持续中断导致客户端停止�
 
 ## 测试环境（2026-10-17）
 
-已另行获授权部署常驻测试环境 `/h5login-test/api`，见 `staging-operations.md`。其独立API18741、PG15441、Redis16391，不复用生产数据；仅Nginx增加测试include并reload。以下邀请版本生产发布清单仍未执行，不能把测试上线当作正式上线。
+已另行获授权部署常驻测试环境 `/h5login-test/api`，见 `staging-operations.md`。其独立API18741、PG15441、Redis16391，不复用生产数据；初建时仅Nginx增加测试include并reload。随后用户另行授权正式发布，结果见下节。
 
-## 邀请拉新版本发布前清单（正式环境尚未执行）
+## 邀请、每日50份及来源scene正式发布（2026-10-17）
 
-本次仅开发，不代表以下生产动作已获授权或已执行。新增接口契约见 `invite-api.md`。线上 `user.openid` 返回字段同样仍待发布。
+- 用户在测试scene成功落库后明确授权正式部署；发布源码 `ede8f0e`（功能代码 `62e4dec`），正式dist逐文件哈希与完整回归候选一致，仅重启 `minigame-login`，active/running、NRestarts=0。
+- 发布前备份 `/var/backups/minigame-server/minigame-20261017T151025356228Z.dump`（0600），实际恢复到临时库验证2用户/1存档及迁移001–002，随后删除临时库；不是仅检查归档索引。
+- owner显式应用迁移003/004，旧迁移checksum通过；仅给runtime新增资料/邀请表SELECT/INSERT/UPDATE，四表无DELETE/DDL权限。旧2用户仍为老用户，source保持NULL；最终回读2用户/1存档，临时资料/邀请均清理。
+- 18单测、64集成（含父组）、2运维配置测试通过，类型检查及依赖审计0漏洞。临时测试Compose已关闭。
+- 正式公网及数据库42项检查：资料、邀请绑定/列表/固定领取凭据、来源新用户资格/幂等/冲突/并发/数据库不可变、JSON存档/CAS/64KiB边界、双环境token隔离、Nginx413、微信无效code401；49份时两token并发仅1份成功，第51份409保持未领取，已领取重试不占额度；未领取优先分组回归通过。
+- 所有合成账号/存档/邀请/会话及限流键清理回读。没有清理真实正式账号；未清空现有会话。自动化用运维合成会话，不代表真实微信新鲜code成功登录或客户端奖励到账。
+- 测试环境29项公网回归通过；因正式邀请路由现已存在，`ops/verify-staging.mjs` 的测试token访问正式列表预期由404更新为401。测试进程及产物、全部环境配置和Nginx文件哈希未变，原站点 `/`200、`/request-logs`401、`/tqwz-query/`200。
+- 证据 `tmp/production-source-rollout/`；旧程序回滚副本 `previous-dist/`及`live-previous-dist/`。回滚只恢复旧dist并重启正式API，保留新增表、列、来源和邀请数据，不回退数据库、不覆盖.env。
+
+## 邀请拉新发布清单（历史准备，已执行结果见上节）
+
+以下保留最初开发阶段的准备清单；2026-10-17已另行获授权完成生产发布，新增接口契约见 `invite-api.md`，登录新增字段也已生效。
 
 1. 另行取得部署/重启授权，确认备份及旧 dist 回滚副本。开发测试只写 `tmp/invite-candidate-dist`，不覆盖当前 dist。
 2. 使用迁移管理员运行新增 `migrations/003_invites.sql`，禁止修改 001/002 历史迁移。该迁移将既有用户标记为已完成首登，避免旧用户在功能上线后获得拉新资格；新增用户由新版登录显式设置首登流程。

@@ -112,14 +112,14 @@ AppSecret 已在聊天中提供过，生产使用前建议在微信后台重置�
 
 生产数据库应使用独立用户/数据库；不要接入或复用 sub2api 的业务数据。
 
-## 新用户来源场景（测试服已部署，正式待发布）
+## 新用户来源场景（正式服及测试服已部署）
 
 新增 `POST /users/source-scene`，首次注册会话上报 `{ "scene": 1007 }`，保存到 `game_users.source_scene` 和服务端上报时间；同值重试幂等，不同值拒绝覆盖，数据库触发器保证写入后不可修改。历史用户不补录。独立于邀请归因。
 
-接口/前端规则见 [source-scene-api.md](docs/source-scene-api.md)。2026-10-17 已在常驻测试服执行迁移 `004_source_scene.sql` 并发布源代码 `62e4dec`；正式环境尚未发布此接口。
+接口/前端规则见 [source-scene-api.md](docs/source-scene-api.md)。2026-10-17 已在常驻测试服及正式服执行迁移 `004_source_scene.sql` 并发布该接口；正式发布包含邀请、未领取优先、每日50份上限及登录新增字段，记录见 [production-operations.md](docs/production-operations.md)。
 
 迁移显式执行，不在 API 启动时自动建表。迁移在事务和 advisory lock 内执行，并校验已执行文件的 SHA-256，后续通过新增 SQL 文件演进，勿修改已执行迁移。
-建议迁移账号与运行账号分离。现有生产权限为 `game_users`、`game_saves` 的 SELECT/INSERT/UPDATE；资料/邀请版本另需迁移 `003_invites.sql`，并经授权新增 `game_profiles`、`game_invitations` 的同类最小权限，不授予运行账号 DELETE/DDL。
+建议迁移账号与运行账号分离。现有生产权限为 `game_users`、`game_saves`、`game_profiles`、`game_invitations` 的 SELECT/INSERT/UPDATE，迁移001–004已执行，不授予运行账号 DELETE/DDL。
 
 ## 自动测试
 

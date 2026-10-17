@@ -2,7 +2,7 @@
 
 ## 发布状态
 
-2026-10-17 已部署到常驻测试服，并完成迁移004及公网验证；**正式服尚未部署**。测试服可直接用于真机联调。
+2026-10-17 已部署到正式服及常驻测试服，两环境均完成迁移004及公网验证。正式请求使用 `/h5login/api`，测试使用 `/h5login-test/api`，登录态与数据不得混用。
 
 用于后续按首次来源场景分析用户行为，不负责上报行为事件，也不修改邀请归因。scene 是客户端上报的统计元数据，服务端不能独立验证是否来自真实微信启动场景，不能据此直接发奖或授权。
 
@@ -10,7 +10,7 @@
 
 `POST <API_BASE>/users/source-scene`
 
-API_BASE（正式地址仅列作未来发布参考）：
+API_BASE：
 - 测试：`https://sub2api.wdaveh5game.com/h5login-test/api`
 - 正式：`https://sub2api.wdaveh5game.com/h5login/api`
 

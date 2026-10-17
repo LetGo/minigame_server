@@ -77,7 +77,7 @@ try {
   assert.equal((await call('data/get', {}, b.token)).data, boundary);
   await call('auth/wechat-login', { code: 'x'.repeat(17000) }, undefined, 413);
   await call('data/get', {}, b.token, 401, false, true);
-  await call('invites/list', {}, b.token, 404, false, true);
+  await call('invites/list', {}, b.token, 401, false, true);
   const invalid = await call('auth/wechat-login', { code: 'invalid_staging_smoke_' + randomUUID().replaceAll('-', '') }, undefined, 401);
   assert.equal(invalid.message, 'WECHAT_CODE_INVALID');
   // Exercise the actual generated optional SDK against HTTPS staging too.

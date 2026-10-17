@@ -9,7 +9,7 @@
 | 测试（开发版/体验版） | `https://sub2api.wdaveh5game.com/h5login-test/api` |
 | 正式 | `https://sub2api.wdaveh5game.com/h5login/api` |
 
-**本次只发布测试环境。正式环境尚未发布邀请功能和登录新增的 `user.openid`、`isNewUser` 字段。**
+**2026-10-17 正式环境也已发布邀请、来源scene及登录新增的 `user.openid`、`isNewUser` 字段。** 本指南仍专用于测试环境，切换正式服时必须隔离登录态、UID和本地业务缓存。
 
 复用现有 HTTPS 域名和微信小游戏 AppID，不需要新增 request 合法域名；已有域名仍需在微信后台配置：`https://sub2api.wdaveh5game.com`（不带路径）。测试环境真实调用微信换码，不存在公开的假登录接口。
 
@@ -102,7 +102,7 @@ SDK 默认仍指向正式环境；旧版固定路径校验不接受测试前缀�
 
 ## 新增来源场景接口（测试服已发布）
 
-`POST /users/source-scene` 已于2026-10-17部署到本指南的常驻测试环境，**正式环境尚未部署**。首次注册后用同一次 token 上报启动时 `options.scene`；首次写入后不可改，和邀请归因独立。完整请求、响应、幂等与错误码见 [source-scene-api.md](source-scene-api.md)。公网合成会话检查已通过，仍需客户端真机联调。
+`POST /users/source-scene` 已于2026-10-17部署到本指南的常驻测试环境及正式环境。首次注册后用同一次 token 上报启动时 `options.scene`；首次写入后不可改，和邀请归因独立。完整请求、响应、幂等与错误码见 [source-scene-api.md](source-scene-api.md)。公网合成会话检查已通过，仍需客户端真机联调。
 
 ## 5. 隔离与验证边界
 
