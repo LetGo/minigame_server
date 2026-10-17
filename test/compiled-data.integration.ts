@@ -32,6 +32,9 @@ test('compiled API and distributed SDK round trip over real HTTP with least-priv
     const login=await fetch(local+'/h5login/api/auth/wechat-login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:role})});
     assert.equal(login.status,200);
     const auth=await login.json() as any;
+    assert.equal(auth.user.openid,role);
+    assert.match(auth.user.id,/^[0-9a-f-]{36}$/);
+    assert.doesNotMatch(JSON.stringify(auth),/session_key|explicit-wechat-test-stub|compiled-test-only/);
     const mod={exports:{} as any};
     runInNewContext(await readFile('client/minigame-data-client.js','utf8'),{module:mod,exports:mod.exports,TextEncoder:undefined,TextDecoder:undefined,Buffer:undefined,crypto:undefined});
     const observed: any[]=[];

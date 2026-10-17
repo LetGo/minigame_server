@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
+import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { createClient } from 'redis';
 import request from 'supertest';
@@ -45,7 +46,9 @@ test('login HTTP flow with real isolated PostgreSQL and Redis (WeChat transport 
     assert.equal(response.body.expiresIn, 604800);
     assert.match(response.body.accessToken, /^[A-Za-z0-9_-]{43}$/);
     assert.match(response.body.user.id, /^[0-9a-f-]{36}$/);
-    assert.doesNotMatch(JSON.stringify(response.body), /openid|session_key|upstream-private-key|integration-test-only/);
+    assert.equal(response.body.user.openid, 'player_one');
+    assert.deepEqual(Object.keys(response.body.user).sort(), ['id', 'openid']);
+    assert.doesNotMatch(JSON.stringify(response.body), /session_key|upstream-private-key|integration-test-only/);
     assert.equal(response.headers['cache-control'], 'no-store');
     const rows = await pool.query('SELECT id, app_id, open_id FROM game_users');
     assert.equal(rows.rowCount, 1);
@@ -65,6 +68,7 @@ test('login HTTP flow with real isolated PostgreSQL and Redis (WeChat transport 
     const responses = await Promise.all(Array.from({ length: 8 }, (_, i) =>
       request(app.getHttpServer()).post(route).send({ code: `concurrent-code-${i}` }).expect(200)));
     assert.equal(new Set(responses.map(r => r.body.user.id)).size, 1);
+    assert.ok(responses.every(r => r.body.user.openid === 'player_one'));
     assert.equal(new Set(responses.map(r => r.body.accessToken)).size, 8);
     assert.equal((await pool.query('SELECT count(*)::int AS n FROM game_users')).rows[0].n, 1);
   });
@@ -143,7 +147,7 @@ test('login HTTP flow with real isolated PostgreSQL and Redis (WeChat transport 
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
     const address = server.address();
     assert.ok(address && typeof address === 'object');
-    const child = spawn(process.execPath, ['dist/main.js'], {
+    const child = spawn(process.execPath, [resolve(process.env.MINIGAME_TEST_DIST_DIR ?? 'dist', 'main.js')], {
       env: { ...process.env, WECHAT_APP_ID: config.appId, WECHAT_APP_SECRET: config.appSecret,
         DATABASE_URL: config.databaseUrl, REDIS_URL: config.redisUrl, PORT: String(address.port), HOST: '127.0.0.1' },
       stdio: ['ignore', 'pipe', 'pipe'],

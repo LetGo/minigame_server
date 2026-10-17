@@ -26,14 +26,15 @@ Content-Type: application/json
   "accessToken": "<服务端生成的随机令牌>",
   "tokenType": "Bearer",
   "expiresIn": 604800,
-  "user": {"id": "<用户 UUID>"}
+  "user": {"id": "<用户 UUID>", "openid": "<当前小游戏的微信 openid>"}
 }
 ```
 
 - 默认有效期 7 天，可配置；到期或 Redis 会话丢失时，客户端重新 `wx.login()`。
 - 多次登录允许多个令牌共存，用户 ID 不变；不是单设备登录/踢下线方案。
 - 存档接口读取 `Authorization: Bearer <accessToken>`，通过令牌摘要查询 Redis 并校验用户/应用归属；HTTPS 下直接收发 JSON，无自定义加密。见存档接入文档，现已发布到生产。
-- 不返回、记录或持久化微信 `session_key`；不返回 `openid` 或 AppSecret。
+- `user.openid` 用于客户端展示及平台反馈定位，不代替 Bearer token；新增字段线上生效以部署通知为准。
+- 不返回、记录或持久化微信 `session_key`；不返回 AppSecret。
 - 微信校验成功后，PG 以 `(app_id, open_id)` 唯一键原子 upsert 用户，Redis 仅保存随机令牌的 SHA-256 摘要键及会话元信息。
 - PG/Redis 任一失败均不返回令牌。Redis 写入失败时 PG 用户记录可能已创建；重试成功后仍复用同一用户。
 - 不自动重试微信换码请求，避免重复消费一次性 code。
@@ -72,6 +73,7 @@ wx.login({
         if (res.statusCode === 200) {
           wx.setStorageSync('game_access_token', res.data.accessToken);
           wx.setStorageSync('game_user_id', res.data.user.id);
+          wx.setStorageSync('game_openid', res.data.user.openid);
           // 令牌是敏感凭据，禁止打印日志或加入 URL。
         } else {
           // 按上表处理；重新登录前获取新的 code，避免无限重试。

@@ -27,15 +27,16 @@ HTTP **200**，`Cache-Control: no-store`。以下仅为结构示例：
   "accessToken": "<随机不透明令牌，不是 JWT>",
   "tokenType": "Bearer",
   "expiresIn": 604800,
-  "user": {"id": "<本服务用户 UUID>"}
+  "user": {"id": "<本服务用户 UUID>", "openid": "<当前小游戏的微信 openid>"}
 }
 ```
 
 - `expiresIn` 单位为秒，默认 7 天，客户端以实际返回值计算有效期。
 - `user.id` 是本服务用户 ID，不是微信 openid。同一小游戏同一微信用户重复登录，ID 不变。
+- `user.openid` 是服务端通过微信换码获得的当前小游戏用户标识，可用于客户端展示及平台反馈问题定位；不是访问凭据，不可代替 Bearer token。不同小游戏的 openid 不应混用。
 - 多次登录允许多个 token 并存，不会自动踢掉其他设备。
 - 令牌为敏感凭据，不得打印日志、放进 URL 或对外分享。到期、会话失效后重新登录。
-- 不返回微信 session_key、openid 或 AppSecret。
+- 不返回微信 session_key 或 AppSecret。新增 `user.openid` 的线上生效时间以部署通知为准。
 线上当前仅发布登录。新增存档读写接入见 `save-api.md`，使用 `Authorization: Bearer *** 与直接 JSON 协议，待存档接口正式上线后启用。尚无刷新令牌、注销、用户资料或 token 校验查询接口。
 
 ## 4. 错误处理
@@ -89,6 +90,7 @@ function loginGame() {
             try {
               wx.setStorageSync('game_access_token', data.accessToken);
               wx.setStorageSync('game_user_id', data.user.id);
+              wx.setStorageSync('game_openid', data.user.openid);
               wx.setStorageSync('game_token_expires_at',
                 Date.now() + data.expiresIn * 1000);
               resolve(data);

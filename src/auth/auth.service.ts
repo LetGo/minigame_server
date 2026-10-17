@@ -30,7 +30,7 @@ export class AuthService {
         { EX: this.config.sessionTtlSeconds, NX: true },
       );
       if (stored !== 'OK') throw new Error('Session creation failed');
-      return { accessToken, tokenType: 'Bearer', expiresIn: this.config.sessionTtlSeconds, user: { id: user.id } };
+      return { accessToken, tokenType: 'Bearer', expiresIn: this.config.sessionTtlSeconds, user: { id: user.id, openid } };
     } catch {
       throw new ServiceUnavailableException('LOGIN_STORAGE_UNAVAILABLE');
     }
