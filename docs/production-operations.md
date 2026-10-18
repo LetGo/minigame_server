@@ -118,3 +118,16 @@ Redis 客户端只有限次重连；若 Redis 持续中断导致客户端停止�
 - 验证了旧库迁移保留已有用户/存档且老用户不获新资格、并发首登仅一份资格、竞争归因只绑定一次、领取幂等、微秒分页、首登 Redis 故障回滚，以及 NX 拒绝时不误删已有会话键。
 - 候选仅写 `tmp/invite-candidate-dist`；测试 JUnit、验收 JSON 和候选 SHA256 清单位于 Git 忽略的 `tmp/invite-*.xml/json`。
 - 与开发前 SHA256 清单逐文件对比，生产 dist 保持不变；`minigame-login` 原 MainPID/启动时间不变，NRestarts=0。专用测试 Compose 已停止；未迁移生产库、未授予生产权限、未改 Nginx、未部署或重启生产服务。
+
+## 激励视频统计正式发布（2026-10-18 09:03 北京时间）
+
+- 用户明确要求“部署正式服”，发布功能源码 `62b584c`；正式 API 产物与重新编译并回归验证的候选逐文件哈希一致。Dashboard 快照 `runtime/dashboard/releases/20261018T010331Z-62b584c`，仅更新其查询和前端脚本。
+- 发布前备份 `/var/backups/minigame-server/minigame-20261018T010223612935Z.dump`（0600），实际恢复至临时数据库，验证 18 用户、4 存档及迁移 001–005 后删除临时库。
+- owner 应用迁移 006，旧迁移 checksum 校验通过；既有 `minigame_app` 对新事件表仅 SELECT/INSERT，既有 `minigame_dashboard_app` 仅 SELECT、默认只读，均无 UPDATE/DELETE/TRUNCATE/DDL。不替换任何凭据。
+- 正式 API 与 Dashboard 分别重启，均 active/running、NRestarts=0；测试服进程、快照、所有 `.env*` 和 Nginx 哈希不变，无 Nginx reload、数据库/Redis 重启或全体会话清空。
+- 发布前重新执行 18 单测、8 dashboard、88 集成、4 运维测试，typecheck/build 通过、生产依赖审计 0 漏洞。自动化临时 Compose 验证后已关闭，不是常驻测试服。
+- 正式 HTTPS 激励视频验收 37 项通过，覆盖鉴权、会话身份、JSON 及服务端时间落库、跨 token/并发幂等、异值冲突、玩家隔离、无效输入拒绝、dashboard 数据库对数；事件非零时实际公网 HTML/JS/API 的 DOM 验收 145 项通过（jsdom，非真实浏览器）。
+- 既有正式业务 42 项、后台 26 项、测试服 29 项公网回归通过；来源、邀请每日 50 限制、存档原文/CAS/64KiB 边界保持正常，原 `/` 200、`/request-logs` 401、`/tqwz-query/` 200。
+- 合成账号、视频事件、邀请、存档、会话和限流键均清理并回读。原 18 用户全部保留，原 4 存档版本及内容哈希未变；09:04 回读 19 用户、4 存档，新增的真实用户未被清理。合成事件不留在累计中；此时视频事件 0，客户端成功接入后开始积累。
+- 常驻测试服尚未发布视频接口，测试新路由仍 404。客户端真实 `isEnded === true` 回调及上报仍需联调；自动化不代表广告平台核验或真机完整观看。
+- 本机证据和回滚程序位于 `tmp/rewarded-video-production/`。回滚只恢复旧 dist / Dashboard 快照并重启对应服务，保留迁移 006 与真实事件，不删除业务数据。

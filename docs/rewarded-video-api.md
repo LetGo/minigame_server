@@ -1,12 +1,12 @@
 # 激励视频完成上报与统计
 
-> 当前为开发版本，尚未发布到正式或常驻测试环境。正式上线需要迁移 006、最小权限授权及游戏 API / dashboard 版本切换；须单独获授权。
+> 2026-10-18 北京时间 09:03 已获用户明确授权发布正式服，功能版本 `62b584c`；迁移 006、最小权限及游戏 API / dashboard 切换已完成并验收。常驻测试环境尚未发布此功能。
 
 ## 接口
 
 `POST /h5login/api/analytics/rewarded-video/completed`
 
-HTTPS + `Authorization: Bearer <accessToken>` + `Content-Type: application/json`，与现有登录/存档一致，无自定义加密。测试环境发布后对应 `/h5login-test/api/analytics/rewarded-video/completed`。不支持 URL 参数。
+HTTPS + `Authorization: Bearer <accessToken>` + `Content-Type: application/json`，与现有登录/存档一致，无自定义加密。正式域名为 `https://sub2api.wdaveh5game.com`；测试环境未来发布后对应 `/h5login-test/api/analytics/rewarded-video/completed`，当前该测试路由仍为 404。不支持 URL 参数。
 
 请求示例（仅结构示例，非真实玩家事件）：
 
@@ -80,7 +80,7 @@ Dashboard 概览增加 **累计激励视频次数**（`metrics.totalRewardedVide
 
 删除玩家会级联删除其事件，累计数相应变化；当前未做自动事件清理。任何将来的保留期限/清理策略应与累计口径一并明确。
 
-## 授权后的上线顺序（本轮尚未执行）
+## 后续发布操作顺序（本次正式发布已执行）
 
 1. 获准目标环境，记录正式/常驻测试各进程和产物基线，正式发布前备份并实际恢复验证。
 2. 使用该环境数据库 owner 执行新增迁移 006，保留全部旧表/玩家/存档。不要用受限 runtime 角色迁移，也不在 API 启动时自动迁移。
