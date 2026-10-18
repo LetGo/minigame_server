@@ -5,7 +5,7 @@ export async function overview(pool, appId) {
       SELECT clock_timestamp() AS at
     ), settings AS (
       SELECT (moment.at AT TIME ZONE 'Asia/Shanghai')::date AS today,
-        tracking_started_at,coverage_start
+        moment.at AS generated_at,tracking_started_at,coverage_start
       FROM moment CROSS JOIN game_analytics_metadata WHERE id=true
     ), dates AS (
       SELECT today-n AS d,settings.* FROM settings CROSS JOIN generate_series(0,13) n
@@ -34,7 +34,7 @@ export async function overview(pool, appId) {
         END AS returned
       FROM dates
     ) SELECT json_build_object(
-      'today',s.today::text,'timezone','Asia/Shanghai','environment','production',
+      'today',s.today::text,'timezone','Asia/Shanghai','environment','production','generatedAt',s.generated_at,
       'trackingStartedAt',s.tracking_started_at,'coverageStart',s.coverage_start::text,
       'metrics',json_build_object('dau',current.dau,'newUsers',current.new_users,
         'invitedNewUsers',current.invited_new_users,
