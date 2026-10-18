@@ -5,7 +5,7 @@ class FakeRedis{map=new Map();withCommandOptions(){return this;}async eval(_scri
 const password='explicit-test-dashboard-password',salt='0123456789abcdef0123456789abcdef';const config={username:'admin',passwordHash:salt+':'+scryptSync(password,salt,64).toString('hex'),appId:'wx1111111111111111',origin:'https://dashboard.example.com',basePath:'/h5dashboard/',environment:'production',trustLocalProxy:true};
 test('dashboard HTTP authentication is scoped, secure, readonly and fail-closed',async t=>{
  const staticDir=await mkdtemp(join(tmpdir(),'dashboard-ui-'));await writeFile(join(staticDir,'index.html'),'<title>小游戏数据看板</title>');
- const redis=new FakeRedis();const queries={overview:async()=>({metrics:{dau:2}}),player:async(_pool,_appid,openid)=>openid==='known'?{user:{id:'testuid'},save:{data:'{ "large":9007199254740993123 }\n'}}:null};
+ const redis=new FakeRedis();const queries={overview:async()=>({today:new Date(Date.now()+8*3600000).toISOString().slice(0,10),generatedAt:new Date().toISOString(),metrics:{dau:2}}),player:async(_pool,_appid,openid)=>openid==='known'?{user:{id:'testuid'},save:{data:'{ "large":9007199254740993123 }\n'}}:null};
  const server=createDashboardServer({pool:{},redis,config,queries,staticDir,loginRateLimit:20});await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(async()=>{await new Promise(r=>server.close(r));await rm(staticDir,{recursive:true,force:true});});
  const api=request(server);const login=()=>api.post('/h5dashboard/api/login').set('Origin',config.origin).send({username:'admin',password});
  await api.get('/h5dashboard/api/overview').expect(401);await api.post('/h5dashboard/api/player').set('Origin',config.origin).send({openid:'known'}).expect(401);

@@ -1,13 +1,15 @@
 import {createServer} from 'node:http';import {readFile} from 'node:fs/promises';import {fileURLToPath} from 'node:url';import {join} from 'node:path';import {promisify} from 'node:util';import {scrypt,randomBytes,createHash,timingSafeEqual} from 'node:crypto';import {isIP} from 'node:net';
+import {createOverviewCache} from './overview-cache.mjs';
 const derive=promisify(scrypt),cookieName='__Secure-minigame-dashboard';
 const csp="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
 class Failure extends Error{constructor(status,message){super(message);this.status=status;}}
 function fail(status,message){throw new Failure(status,message);}
 function hash(value){return createHash('sha256').update(value).digest('hex');}
-export function createDashboardServer({pool,redis,config,queries,staticDir=fileURLToPath(new URL('./public/',import.meta.url)),loginRateLimit=5}){
+export function createDashboardServer({pool,redis,config,queries,staticDir=fileURLToPath(new URL('./public/',import.meta.url)),loginRateLimit=5,overviewClock=Date.now}){
  if(!pool||!redis||!queries?.overview||!queries?.player||!config?.username||!/^https:\/\//.test(config.origin??'')||!/^([a-f0-9]{32}):([a-f0-9]{128})$/.test(config.passwordHash??''))throw new Error('Invalid dashboard configuration');
  const base=config.basePath??'/h5dashboard/';if(!/^\/[a-z0-9-]+\/$/.test(base))throw new Error('Invalid dashboard path');
  const redisCall=()=>redis.withCommandOptions({abortSignal:AbortSignal.timeout(3000)});
+ const overview=createOverviewCache({appId:config.appId,load:appId=>queries.overview(pool,appId),now:overviewClock});
  let passwordJobs=0;
  const headers={'Cache-Control':'no-store','Content-Security-Policy':csp,'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY','Permissions-Policy':'camera=(), microphone=(), geolocation=()'};
  const reply=(res,status,value)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(value));};
@@ -33,7 +35,7 @@ export function createDashboardServer({pool,redis,config,queries,staticDir=fileU
    }
    const actor=await session(req);
    if(path==='api/me'){reply(res,200,{authenticated:true,username:actor.username,environment:config.environment??'production'});return;}
-   if(path==='api/overview'){reply(res,200,await queries.overview(pool,config.appId));return;}
+   if(path==='api/overview'){reply(res,200,await overview());return;}
    if(path==='api/logout'){const input=await body(req);if(Object.keys(input).length)fail(400,'INVALID_REQUEST');await redisCall().del(key(actor.token));res.setHeader('Set-Cookie',`${cookieName}=; Path=${base}; HttpOnly; Secure; SameSite=Strict; Max-Age=0`);reply(res,200,{authenticated:false});return;}
    const input=await body(req);if(Object.keys(input).join(',')!=='openid'||typeof input.openid!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(input.openid))fail(400,'INVALID_OPENID');const record=await queries.player(pool,config.appId,input.openid);if(!record)fail(404,'PLAYER_NOT_FOUND');reply(res,200,record);
   }catch(error){if(!res.headersSent)reply(res,error instanceof Failure?error.status:503,{message:error instanceof Failure?error.message:'DASHBOARD_UNAVAILABLE'});else res.end();}
