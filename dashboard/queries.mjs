@@ -38,7 +38,9 @@ export async function overview(pool, appId) {
       'trackingStartedAt',s.tracking_started_at,'coverageStart',s.coverage_start::text,
       'metrics',json_build_object('dau',current.dau,'newUsers',current.new_users,
         'invitedNewUsers',current.invited_new_users,
-        'totalRewardedVideos',(SELECT count(*)::float8 FROM game_rewarded_video_events WHERE app_id=$1),
+        'todayRewardedVideos',(SELECT count(*)::float8 FROM game_rewarded_video_events WHERE app_id=$1
+          AND recorded_at>=s.today::timestamp AT TIME ZONE 'Asia/Shanghai'
+          AND recorded_at<(s.today+1)::timestamp AT TIME ZONE 'Asia/Shanghai'),
         'totalUsers',(SELECT count(*)::int FROM game_users WHERE app_id=$1 AND first_login_completed),
         'd1',json_build_object('cohortDate',(s.today-1)::text,'cohortSize',current.cohort_size,
           'returned',current.returned,'rate',current.returned::float8/nullif(current.cohort_size,0))),

@@ -6,7 +6,7 @@
 
 新增独立登录的只读运营后台：今日登录活跃、新注册、实时次留、openid 玩家/原始存档查询。统计口径、安全及运维见 [`docs/dashboard.md`](docs/dashboard.md)。
 
-正式服已于 2026-10-18 发布激励视频完整观看上报（点位、会话玩家 UID、服务端记录时间、客户端 JSON 信息）及 dashboard 累计次数，功能版本 `62b584c`。接入与幂等规则见 [`docs/rewarded-video-api.md`](docs/rewarded-video-api.md)。**常驻测试环境尚未发布此功能。**
+正式服已于 2026-10-18 发布激励视频完整观看上报（点位、会话玩家 UID、服务端记录时间、客户端 JSON 信息），接口功能版本 `62b584c`。Dashboard 按用户更正显示北京时间的**今日激励视频次数**，不展示历史累计，历史明细仍保留。接入与幂等规则见 [`docs/rewarded-video-api.md`](docs/rewarded-video-api.md)。**常驻测试环境尚未发布此功能。**
 登录服务已部署至下述 HTTPS 地址。客户端接入文档见 [`docs/wechat-login-api.md`](docs/wechat-login-api.md)，部署与运维见 [`docs/production-operations.md`](docs/production-operations.md)。真实玩家成功登录仍需小游戏新鲜 code 联调。
 
 ## 常驻测试环境
