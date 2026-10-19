@@ -81,3 +81,31 @@ export async function player(pool, appId, openid) {
     WHERE u.app_id=$1 AND u.open_id=$2`, [appId, openid]);
   return rows[0]?.result ?? null;
 }
+
+// Existing daily records only: storage retains the first successful login per user/day.
+// No additional deduplication and no reconstruction from mutable last_login_at.
+export async function loginLogs(pool, appId, offset = 0) {
+  const { rows } = await pool.query(`
+    WITH moment AS MATERIALIZED (SELECT clock_timestamp() AS at),
+    settings AS (
+      SELECT at AS generated_at, (at AT TIME ZONE 'Asia/Shanghai')::date AS today FROM moment
+    ), matching AS MATERIALIZED (
+      SELECT l.user_id, l.first_login_at, u.open_id, p.nickname
+      FROM game_daily_logins l
+      JOIN game_users u ON u.app_id=l.app_id AND u.id=l.user_id
+      LEFT JOIN game_profiles p ON p.user_id=u.id
+      CROSS JOIN settings s
+      WHERE l.app_id=$1 AND l.activity_date=s.today AND u.first_login_completed
+    ), totals AS (SELECT count(*)::float8 AS total FROM matching),
+    page AS (
+      SELECT * FROM matching ORDER BY first_login_at DESC, user_id DESC LIMIT 50 OFFSET $2::int
+    ) SELECT json_build_object(
+      'today',s.today::text,'timezone','Asia/Shanghai','generatedAt',s.generated_at,
+      'total',t.total,'offset',$2::int,'limit',50,'hasMore',($2::int+50)<t.total,
+      'items',coalesce((SELECT json_agg(json_build_object(
+        'loginAt',first_login_at,'openid',open_id,'nickname',nickname
+      ) ORDER BY first_login_at DESC,user_id DESC) FROM page),'[]'::json)
+    ) AS result FROM settings s CROSS JOIN totals t`, [appId, offset]);
+  if (!rows[0]?.result) throw new Error('Login records unavailable');
+  return rows[0].result;
+}

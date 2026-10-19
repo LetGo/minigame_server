@@ -21,7 +21,7 @@ export function createDashboardServer({pool,redis,config,queries,staticDir=fileU
   try{
    const url=req.url??'';if(!url.startsWith(base)||url.includes('?')||url.includes('#'))fail(404,'NOT_FOUND');const path=url.slice(base.length),method=req.method;
    if(method==='GET'&&['','index.html','app.js','style.css'].includes(path)){const name=path||'index.html';let data;try{data=await readFile(join(staticDir,name));}catch{fail(404,'NOT_FOUND');}res.writeHead(200,{'Content-Type':name.endsWith('.html')?'text/html; charset=utf-8':name.endsWith('.js')?'text/javascript; charset=utf-8':'text/css; charset=utf-8'});res.end(data);return;}
-   const valid=(method==='GET'&&['api/me','api/overview'].includes(path))||(method==='POST'&&['api/login','api/logout','api/player'].includes(path));if(!valid)fail(404,'NOT_FOUND');
+   const valid=(method==='GET'&&['api/me','api/overview'].includes(path))||(method==='POST'&&['api/login','api/logout','api/player','api/login-logs'].includes(path));if(!valid)fail(404,'NOT_FOUND');
    if(method==='POST'&&req.headers.origin!==config.origin)fail(403,'ORIGIN_FORBIDDEN');
    if(path==='api/login'){
     const remote=req.socket.remoteAddress??'unknown';const forwarded=req.headers['x-real-ip'];const ip=config.trustLocalProxy&&['127.0.0.1','::1','::ffff:127.0.0.1'].includes(remote)&&typeof forwarded==='string'&&isIP(forwarded)?forwarded:remote;
@@ -37,6 +37,7 @@ export function createDashboardServer({pool,redis,config,queries,staticDir=fileU
    if(path==='api/me'){reply(res,200,{authenticated:true,username:actor.username,environment:config.environment??'production'});return;}
    if(path==='api/overview'){reply(res,200,await overview());return;}
    if(path==='api/logout'){const input=await body(req);if(Object.keys(input).length)fail(400,'INVALID_REQUEST');await redisCall().del(key(actor.token));res.setHeader('Set-Cookie',`${cookieName}=; Path=${base}; HttpOnly; Secure; SameSite=Strict; Max-Age=0`);reply(res,200,{authenticated:false});return;}
+   if(path==='api/login-logs'){const input=await body(req);if(Object.keys(input).some(k=>k!=='offset'))fail(400,'INVALID_REQUEST');const offset=input.offset===undefined?0:input.offset;if(!Number.isInteger(offset)||offset<0||offset>10000000)fail(400,'INVALID_REQUEST');reply(res,200,await queries.loginLogs(pool,config.appId,offset));return;}
    const input=await body(req);if(Object.keys(input).join(',')!=='openid'||typeof input.openid!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(input.openid))fail(400,'INVALID_OPENID');const record=await queries.player(pool,config.appId,input.openid);if(!record)fail(404,'PLAYER_NOT_FOUND');reply(res,200,record);
   }catch(error){if(!res.headersSent)reply(res,error instanceof Failure?error.status:503,{message:error instanceof Failure?error.message:'DASHBOARD_UNAVAILABLE'});else res.end();}
  });

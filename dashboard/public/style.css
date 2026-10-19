@@ -559,6 +559,11 @@ body.dark .metric-card {
     }
 }
 
+.login-log-controls { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; margin: 1rem 0; }
+.login-log-controls button { padding: .5rem 1rem; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-bg); color: var(--color-text); }
+.history-table-container { overflow-x: auto; }
+.login-logs-table { min-width: 600px; }
+.login-logs-table td { overflow-wrap: anywhere; }
 /* Accessibility */
 :focus-visible {
     outline: 2px solid var(--color-primary);

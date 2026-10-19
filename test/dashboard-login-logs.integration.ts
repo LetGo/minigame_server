@@ -1,0 +1,40 @@
+import assert from 'node:assert/strict';
+import {test} from 'node:test';
+import {randomBytes,randomUUID,scryptSync} from 'node:crypto';
+import {Pool} from 'pg';
+import {createClient} from 'redis';
+import request from 'supertest';
+import {resolve} from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {migrate} from '../src/database/migrate.js';
+
+test('daily login log HTTP uses real readonly PG, Beijing day, stable order, bounded pages and app isolation',async t=>{
+ const queries=await import(pathToFileURL(resolve('dashboard/queries.mjs')).href);
+ assert.equal(typeof queries.loginLogs,'function','loginLogs query must exist');
+ const owner=new Pool({connectionString:'postgresql://minigame_test:local_integration_only@127.0.0.1:15439/minigame_test'});await migrate(owner);
+ const suffix=randomBytes(5).toString('hex'),appId='loginlogs_'+suffix,foreignApp='foreign_'+suffix,role='log_test_'+suffix,password='isolated-login-log-test-only';
+ await owner.query(`CREATE ROLE ${role} LOGIN PASSWORD '${password}'`);await owner.query(`GRANT USAGE ON SCHEMA public TO ${role}`);await owner.query(`GRANT SELECT ON game_users,game_profiles,game_daily_logins TO ${role}`);await owner.query(`ALTER ROLE ${role} SET default_transaction_read_only=on`);
+ const pool=new Pool({connectionString:`postgresql://${role}:${password}@127.0.0.1:15439/minigame_test`,max:2,options:'-c jit=off'}),redis=createClient({url:'redis://127.0.0.1:16389/14'});redis.on('error',()=>{});await redis.connect();
+ const {createDashboardServer}=await import(pathToFileURL(resolve('dashboard/backend.js')).href);
+ const salt='11223344556677889900112233445566',config={username:'logtest',passwordHash:salt+':'+scryptSync(password,salt,64).toString('hex'),appId,origin:'https://dashboard.example.com',basePath:'/h5dashboard/',environment:'production'};
+ const server=createDashboardServer({pool,redis,config,queries});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));
+ t.after(async()=>{await new Promise<void>(r=>server.close(r));await redis.quit();await pool.end();await owner.query('DELETE FROM game_users WHERE app_id=ANY($1::varchar[])',[[appId,foreignApp]]);await owner.query(`DROP OWNED BY ${role}`);await owner.query(`DROP ROLE ${role}`);await owner.end();});
+ const {rows:[clock]}=await owner.query("SELECT (clock_timestamp() AT TIME ZONE 'Asia/Shanghai')::date::text AS today, date_trunc('day',clock_timestamp() AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai' AS midnight");
+ const today=clock.today as string,midnight=new Date(clock.midnight).getTime();
+ async function insert(app:string,openid:string,stamp:number,completed=true,nickname:string|null=null){const uid=randomUUID();await owner.query('INSERT INTO game_users(id,app_id,open_id,first_login_completed,last_login_at) VALUES($1,$2,$3,$4,$5)',[uid,app,openid,completed,new Date(stamp+1000)]);await owner.query("INSERT INTO game_daily_logins(app_id,user_id,activity_date,first_login_at) VALUES($1,$2,($3::timestamptz AT TIME ZONE 'Asia/Shanghai')::date,$3)",[app,uid,new Date(stamp)]);if(nickname!==null)await owner.query('INSERT INTO game_profiles(user_id,nickname,avatar_url) VALUES($1,$2,$3)',[uid,nickname,'https://example.test/avatar.png']);return uid;}
+ const first=await insert(appId,'log_midnight',midnight,true,'<b>raw nickname</b>');
+ for(let n=1;n<53;n++)await insert(appId,'log_'+n,midnight+(n===52?51:n)*60000,true,n===1?'玩家一':null);
+ await insert(appId,'yesterday',midnight-1);await insert(appId,'tomorrow',midnight+86400000);await insert(appId,'incomplete',midnight+60000,false);await insert(foreignApp,'foreign',midnight);
+ await owner.query('UPDATE game_users SET last_login_at=$2 WHERE id=$1',[first,new Date(midnight+7200000)]);
+ await owner.query("INSERT INTO game_daily_logins(app_id,user_id,activity_date,first_login_at) VALUES($1,$2,$3::date,$4) ON CONFLICT(app_id,activity_date,user_id) DO NOTHING",[appId,first,today,new Date(midnight+7200000)]);
+ const api=request(server);await api.post('/h5dashboard/api/login-logs').set('Origin',config.origin).send({offset:0}).expect(401);
+ const login=await api.post('/h5dashboard/api/login').set('Origin',config.origin).send({username:config.username,password}).expect(200);const cookie=String((login.headers['set-cookie'] as unknown as string[])[0]).split(';')[0]!;
+ const get=(offset:number)=>api.post('/h5dashboard/api/login-logs').set('Origin',config.origin).set('Cookie',cookie).send({offset}).expect(200);
+ const page1=(await get(0)).body,page2=(await get(50)).body,beyond=(await get(100)).body;
+ assert.equal(page1.today,today);assert.equal(page1.timezone,'Asia/Shanghai');assert.equal(page1.total,53);assert.equal(page1.limit,50);assert.equal(page1.items.length,50);assert.equal(page1.hasMore,true);assert.equal(page2.total,53);assert.equal(page2.items.length,3);assert.equal(page2.hasMore,false);assert.equal(beyond.total,53);assert.deepEqual(beyond.items,[]);assert.equal(beyond.hasMore,false);
+ const expected=(await owner.query(`SELECT l.first_login_at AS "loginAt",u.open_id AS openid,p.nickname FROM game_daily_logins l JOIN game_users u ON u.app_id=l.app_id AND u.id=l.user_id LEFT JOIN game_profiles p ON p.user_id=u.id WHERE l.app_id=$1 AND l.activity_date=$2::date AND u.first_login_completed ORDER BY l.first_login_at DESC,l.user_id DESC`,[appId,today])).rows;
+ const combined=[...page1.items,...page2.items];assert.deepEqual(combined.map((x:any)=>({...x,loginAt:new Date(x.loginAt).toISOString()})),expected.map(x=>({...x,loginAt:x.loginAt.toISOString()})));
+ assert.equal(combined.filter(x=>x.openid==='log_midnight').length,1,'existing day record is kept, not reconstructed from latest login');assert.equal(new Date(combined.find(x=>x.openid==='log_midnight').loginAt).getTime(),midnight,'inclusive Beijing midnight and original first-login time');assert(combined.some(x=>x.nickname===null),'missing profile remains null');assert(!combined.some(x=>['yesterday','tomorrow','foreign','incomplete'].includes(x.openid)));
+ assert.equal((await pool.query('SHOW default_transaction_read_only')).rows[0].default_transaction_read_only,'on');await assert.rejects(()=>pool.query('UPDATE game_users SET last_login_at=clock_timestamp() WHERE id=$1',[first]));
+ await api.post('/h5dashboard/api/logout').set('Origin',config.origin).set('Cookie',cookie).send({}).expect(200);await api.post('/h5dashboard/api/login-logs').set('Origin',config.origin).set('Cookie',cookie).send({offset:0}).expect(401);
+});
