@@ -10,4 +10,15 @@ test('overview renders invited registrations as a subset card and per-day trend 
  render({...data,history:[...data.history].reverse()});const sortedTable=view.children.find(e=>e.className==='history-table-container').children[0];assert.equal(sortedTable.children[1].children[0].children[0].textContent,'2026-10-18（截至现在）');assert.equal(sortedTable.children[1].children[1].children[0].textContent,'2026-10-17');
  render({...data,metrics:{...data.metrics,newUsers:0,invitedNewUsers:0,todayRewardedVideos:0}});assert.equal(view.children[0].children.find(e=>e.children[0].textContent==='今日激励视频次数').children[1].textContent,'0');assert.doesNotMatch(view.textContent,/NaN|Infinity/);assert.match(view.children[0].children.find(e=>e.children[0].textContent==='今日邀请新注册').children[2].textContent,/—/);
 });
+test('video card shows two-decimal videos per daily active user and handles unavailable denominators',async()=>{
+ const js=await readFile(new URL('../dashboard/public/app.js',import.meta.url),'utf8');
+ class Element{children=[];value='';append(...items){this.children.push(...items);}replaceChildren(...items){this.children=[...items];}set textContent(value){this.value=String(value);this.children=[];}get textContent(){return this.value+this.children.map(x=>x.textContent).join('');}}
+ const view=new Element(),render=runInNewContext(js.slice(0,js.indexOf("$('login-form').addEventListener"))+';renderOverview',{document:{getElementById:()=>view,createElement:()=>new Element()}});
+ for(const [videos,dau,expected] of [[12,4,'3.00'],[10,3,'3.33'],[0,4,'0.00'],[0,0,'—'],[12,0,'—'],[12,null,'—'],[null,4,'—'],[12,undefined,'—'],[undefined,4,'—']]){
+  render({today:'2026-10-19',coverageStart:'2026-10-17',metrics:{dau,newUsers:0,invitedNewUsers:0,totalUsers:8,todayRewardedVideos:videos,d1:{rate:null,cohortSize:0,returned:0}},history:[]});
+  const card=view.children[0].children.find(e=>e.children[0].textContent==='今日激励视频次数');
+  assert(card.children[2].textContent.includes(`人均 ${expected} 次`),`videos=${videos}, dau=${dau}: ${card.children[2].textContent}`);
+  assert.match(card.children[2].textContent,/今日活跃用户/);assert.match(card.children[2].textContent,/北京时间当日.*客户端上报完成.*按事件去重/);assert.doesNotMatch(card.textContent,/NaN|Infinity/);
+ }
+});
 test('dashboard renders all returned player values as text; credentials never persist in browser storage',async()=>{const js=await readFile(new URL('../dashboard/public/app.js',import.meta.url),'utf8');assert.doesNotMatch(js,/innerHTML|outerHTML|insertAdjacentHTML|document\.write|localStorage|sessionStorage|eval\(/);assert.match(js,/textContent/);assert.match(js,/Asia\/Shanghai/);assert.doesNotMatch(js,/openid[^\n]{0,80}\.trim\(/);});
