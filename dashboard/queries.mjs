@@ -90,7 +90,7 @@ export async function loginLogs(pool, appId, offset = 0) {
     settings AS (
       SELECT at AS generated_at, (at AT TIME ZONE 'Asia/Shanghai')::date AS today FROM moment
     ), matching AS MATERIALIZED (
-      SELECT l.user_id, l.first_login_at, u.open_id, p.nickname, u.source_scene
+      SELECT l.user_id, l.first_login_at, u.open_id, p.nickname, u.source_scene, u.created_at
       FROM game_daily_logins l
       JOIN game_users u ON u.app_id=l.app_id AND u.id=l.user_id
       LEFT JOIN game_profiles p ON p.user_id=u.id
@@ -103,7 +103,7 @@ export async function loginLogs(pool, appId, offset = 0) {
       'today',s.today::text,'timezone','Asia/Shanghai','generatedAt',s.generated_at,
       'total',t.total,'offset',$2::int,'limit',50,'hasMore',($2::int+50)<t.total,
       'items',coalesce((SELECT json_agg(json_build_object(
-        'loginAt',first_login_at,'openid',open_id,'nickname',nickname,'sourceScene',source_scene
+        'loginAt',first_login_at,'openid',open_id,'nickname',nickname,'sourceScene',source_scene,'registeredAt',created_at
       ) ORDER BY first_login_at DESC,user_id DESC) FROM page),'[]'::json)
     ) AS result FROM settings s CROSS JOIN totals t`, [appId, offset]);
   if (!rows[0]?.result) throw new Error('Login records unavailable');

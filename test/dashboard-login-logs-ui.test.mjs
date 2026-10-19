@@ -19,18 +19,18 @@ async function setup(fetch=async()=>{throw Error('unexpected fetch');}){
  const app=runInNewContext(js.slice(0,js.indexOf("$('login-form').addEventListener"))+';({renderLoginLogs,switchView,showLogin,activate(){loggedIn=true;},setTab(value){tab=value;}})',{document:{getElementById:get,createElement:()=>new Element(),querySelectorAll:()=>[]},fetch});
  return {app,view:get('view-container'),elements};
 }
-const record={sourceScene:1030,loginAt:'2026-10-19T16:30:00Z',openid:'same-openid',nickname:'<img src=x onerror=alert(1)>'};
-const data={today:'2026-10-20',timezone:'Asia/Shanghai',generatedAt:'2026-10-19T16:31:00Z',total:2,offset:0,limit:50,hasMore:false,items:[record,{...record,loginAt:'2026-10-19T16:20:00Z',nickname:null,sourceScene:null}]};
+const record={registeredAt:'2026-10-17T16:01:02Z',sourceScene:1030,loginAt:'2026-10-19T16:30:00Z',openid:'same-openid',nickname:'<img src=x onerror=alert(1)>'};
+const data={today:'2026-10-20',timezone:'Asia/Shanghai',generatedAt:'2026-10-19T16:31:00Z',total:2,offset:0,limit:50,hasMore:false,items:[record,{...record,loginAt:'2026-10-19T16:20:00Z',nickname:null,sourceScene:null,registeredAt:null}]};
 const walk=e=>[e,...e.children.flatMap(walk)];
 test('login logs include first-source raw scene and official description without extra deduplication',async()=>{
  const {app,view}=await setup();app.renderLoginLogs(data,view);
  const table=walk(view).find(e=>e.className.includes('login-logs-table'));assert(table);
- assert.deepEqual(table.children[0].children[0].children.map(e=>e.textContent),['登录时间（北京时间）','openid','昵称','首次来源场景']);
- const rows=table.children[1].children;assert.equal(rows.length,2,'do not deduplicate records returned by source');assert.equal(rows[0].children.length,4);
- assert.equal(rows[0].children[0].textContent,new Date(record.loginAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}));assert.equal(rows[0].children[1].textContent,record.openid);assert.equal(rows[0].children[2].textContent,record.nickname);assert.equal(rows[0].children[2].children.length,0,'nickname rendered only as text');assert.equal(rows[1].children[2].textContent,'—');assert.equal(rows[0].children[3].textContent,'1030 · 自动化测试下打开小程序');assert.equal(rows[1].children[3].textContent,'未上报');assert.match(view.textContent,/2026-10-20/);assert.match(view.textContent,/共 2 条/);
+ assert.deepEqual(table.children[0].children[0].children.map(e=>e.textContent),['登录时间（北京时间）','openid','昵称','首次来源场景','注册时间（北京时间）']);
+ const rows=table.children[1].children;assert.equal(rows.length,2,'do not deduplicate records returned by source');assert.equal(rows[0].children.length,5);
+ assert.equal(rows[0].children[0].textContent,new Date(record.loginAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}));assert.equal(rows[0].children[1].textContent,record.openid);assert.equal(rows[0].children[2].textContent,record.nickname);assert.equal(rows[0].children[2].children.length,0,'nickname rendered only as text');assert.equal(rows[1].children[2].textContent,'—');assert.equal(rows[0].children[3].textContent,'1030 · 自动化测试下打开小程序');assert.equal(rows[1].children[3].textContent,'未上报');assert.equal(rows[0].children[4].textContent,'2026/10/18 00:01:02');assert.equal(rows[1].children[4].textContent,'—');assert.match(view.textContent,/2026-10-20/);assert.match(view.textContent,/共 2 条/);
 });
 test('login logs render empty results with disabled pagination',async()=>{
- const {app,view}=await setup();app.renderLoginLogs({...data,total:0,items:[]},view);assert.match(view.textContent,/暂无.*登录记录/);const buttons=walk(view).filter(e=>e.events.click);assert.equal(buttons.length,2);assert(buttons.every(e=>e.disabled));assert.doesNotMatch(view.textContent,/NaN|Infinity/);
+ const {app,view}=await setup();app.renderLoginLogs({...data,total:0,items:[]},view);assert.match(view.textContent,/暂无.*登录记录/);assert.equal(walk(view).find(e=>e.colSpan).colSpan,5);const buttons=walk(view).filter(e=>e.events.click);assert.equal(buttons.length,2);assert(buttons.every(e=>e.disabled));assert.doesNotMatch(view.textContent,/NaN|Infinity/);
 });
 test('left navigation opens login logs, requests today first page and states source limitation',async()=>{
  const html=await readFile(new URL('../dashboard/public/index.html',import.meta.url),'utf8');assert.match(html,/data-view="loginLogs">登录日志/);
