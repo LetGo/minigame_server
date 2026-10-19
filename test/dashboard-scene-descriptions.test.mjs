@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {test} from 'node:test';
+import {readFile} from 'node:fs/promises';
+import {runInNewContext} from 'node:vm';
+class Element{children=[];value='';append(...items){this.children.push(...items);}replaceChildren(...items){this.children=[...items];}set textContent(value){this.value=String(value);this.children=[];}get textContent(){return this.value+this.children.map(x=>x.textContent).join('');}addEventListener(){}}
+async function load(){const js=await readFile(new URL('../dashboard/public/app.js',import.meta.url),'utf8');return runInNewContext(js.slice(0,js.indexOf("$('login-form').addEventListener"))+';({renderPlayer})',{document:{getElementById:()=>new Element(),createElement:()=>new Element()}});}
+const player=scene=>({user:{id:'test-uid',openid:'test-openid',nickname:'测试玩家',avatarUrl:null,sourceScene:scene},save:{exists:false},invitations:{summary:{total:0,claimed:0,unclaimed:0},items:[],truncated:false},inviter:null,dailyLogins:[]});
+const sceneValue=target=>target.children[0].children.find(field=>field.children[0].textContent==='首次来源 scene').children[1];
+test('player scene shows original ID with official minigame description',async()=>{const app=await load();for(const [id,description]of [[1005,'微信首页顶部搜索框的搜索结果页'],[1007,'单人聊天会话中的小程序消息卡片'],[1030,'自动化测试下打开小程序'],[1055,'JSAPI 网页打开小程序'],[1106,'聊天主界面下拉，从顶部搜索结果页，打开小程序'],[1373,'小游戏评价与推荐'],[1387,'小游戏直玩广告']]){const target=new Element();app.renderPlayer(player(id),target);assert.equal(sceneValue(target).textContent,`${id} · ${description}`);}});
+test('scene 1003 and other undocumented values remain explicit unknown IDs, not guessed or coerced',async()=>{const app=await load();for(const id of [1003,999999,0,'01007','__proto__','<img src=x onerror=alert(1)>']){const target=new Element();app.renderPlayer(player(id),target);const element=sceneValue(target);assert.equal(element.textContent,`${id} · 官方当前文档未收录`);assert.equal(element.children.length,0,'unrecognized values must remain text, not markup');}});
+test('missing scene remains unreported without fabricating a source',async()=>{const app=await load();for(const id of [null,undefined]){const target=new Element();app.renderPlayer(player(id),target);assert.equal(sceneValue(target).textContent,'未上报');}});
