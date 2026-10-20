@@ -44,9 +44,11 @@ export async function overview(pool, appId) {
         'totalUsers',(SELECT count(*)::int FROM game_users WHERE app_id=$1 AND first_login_completed),
         'd1',json_build_object('cohortDate',(s.today-1)::text,'cohortSize',current.cohort_size,
           'returned',current.returned,'rate',current.returned::float8/nullif(current.cohort_size,0))),
-      'history',(SELECT json_agg(json_build_object('date',d::text,'newUsers',new_users,'dau',dau,
-          'invitedNewUsers',invited_new_users,
-          'cohortSize',cohort_size,'returned',returned,'d1Rate',returned::float8/nullif(cohort_size,0)) ORDER BY d) FROM daily)
+      'history',(SELECT json_agg(json_build_object('date',h.d::text,'newUsers',h.new_users,'dau',h.dau,
+          'invitedNewUsers',h.invited_new_users,'retentionDate',(h.d+1)::text,'d1Pending',h.d=s.today,
+          'cohortSize',h.new_users,'returned',next_day.returned,
+          'd1Rate',next_day.returned::float8/nullif(h.new_users,0)) ORDER BY h.d)
+        FROM daily h LEFT JOIN daily next_day ON next_day.d=h.d+1)
     ) AS result FROM settings s JOIN daily current ON current.d=s.today`, [appId]);
   if (!rows[0]?.result) throw new Error('Analytics metadata unavailable');
   return rows[0].result;
