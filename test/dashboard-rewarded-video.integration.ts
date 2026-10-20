@@ -33,7 +33,23 @@ test('dashboard video count uses Beijing calendar day with inclusive start and e
  assert.equal(Object.hasOwn(result.metrics,'totalRewardedVideos'),false,'dashboard contract no longer advertises all-time video count');
  assert.equal((await overview(pool,foreignApp)).metrics.todayRewardedVideos,1);
  assert.equal(result.history.length,14);
+ const yesterday=(await pool.query('SELECT ($1::date-1)::text AS day',[day])).rows[0].day;
+ for(const row of result.history){assert.equal(row.rewardedVideos,row.date===day?3:row.date===yesterday?1:0,`reported videos belong to Beijing day ${row.date}, independent of login coverage`);}
+ assert.equal(result.history.find((r:any)=>r.date===day).rewardedVideos,result.metrics.todayRewardedVideos,'today trend and card share the same metric');
  assert.equal(result.metrics.totalUsers,2);
+ await t.test('oldest visible day is counted without relying on login coverage, and the previous day is excluded',async()=>{
+  const earliest=(await pool.query('SELECT ($1::date-13)::text AS day',[day])).rows[0].day;
+  await pool.query(`INSERT INTO game_rewarded_video_events(app_id,user_id,event_id,placement,recorded_at)
+   VALUES($1,$2,gen_random_uuid(),'first_visible',$3::date::timestamp AT TIME ZONE 'Asia/Shanghai'),
+   ($1,$2,gen_random_uuid(),'before_visible',($3::date::timestamp AT TIME ZONE 'Asia/Shanghai')-interval '1 microsecond')`,[appId,a.id,earliest]);
+  try{
+   const h=await overview(pool,appId);assert.equal(h.history.length,14);
+   assert.equal(h.history[0].date,earliest);assert.equal(h.history[0].rewardedVideos,1);
+   assert.equal(h.history[0].dau,null,'video history is not gated by daily-login coverage');
+   assert.equal(h.history.reduce((sum:number,r:any)=>sum+r.rewardedVideos,0),5,'three today, one yesterday, one oldest; no foreign, future or older events');
+   assert.equal(h.metrics.todayRewardedVideos,3,'historical events do not change today card');
+  }finally{await pool.query("DELETE FROM game_rewarded_video_events WHERE app_id=$1 AND placement IN ('first_visible','before_visible')",[appId]);}
+ });
  await pool.query('DELETE FROM game_users WHERE id=$1',[b.id]);
  assert.equal((await overview(pool,appId)).metrics.todayRewardedVideos,1,'cascade removes only stored player events');
  const historical=(await pool.query("SELECT count(*)::int n FROM game_rewarded_video_events WHERE app_id=$1 AND recorded_at<($2::date::timestamp AT TIME ZONE 'Asia/Shanghai')",[appId,day])).rows[0].n;

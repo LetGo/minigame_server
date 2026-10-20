@@ -11,6 +11,9 @@ export async function overview(pool, appId) {
       SELECT today-n AS d,settings.* FROM settings CROSS JOIN generate_series(0,13) n
     ), daily AS (
       SELECT d,today,coverage_start,
+        (SELECT count(*)::float8 FROM game_rewarded_video_events e WHERE e.app_id=$1
+          AND e.recorded_at>=d::timestamp AT TIME ZONE 'Asia/Shanghai'
+          AND e.recorded_at<(d+1)::timestamp AT TIME ZONE 'Asia/Shanghai') AS rewarded_videos,
         (SELECT count(*)::int FROM game_users u WHERE u.app_id=$1 AND u.first_login_completed
           AND u.created_at>=d::timestamp AT TIME ZONE 'Asia/Shanghai'
           AND u.created_at<(d+1)::timestamp AT TIME ZONE 'Asia/Shanghai') AS new_users,
@@ -38,14 +41,12 @@ export async function overview(pool, appId) {
       'trackingStartedAt',s.tracking_started_at,'coverageStart',s.coverage_start::text,
       'metrics',json_build_object('dau',current.dau,'newUsers',current.new_users,
         'invitedNewUsers',current.invited_new_users,
-        'todayRewardedVideos',(SELECT count(*)::float8 FROM game_rewarded_video_events WHERE app_id=$1
-          AND recorded_at>=s.today::timestamp AT TIME ZONE 'Asia/Shanghai'
-          AND recorded_at<(s.today+1)::timestamp AT TIME ZONE 'Asia/Shanghai'),
+        'todayRewardedVideos',current.rewarded_videos,
         'totalUsers',(SELECT count(*)::int FROM game_users WHERE app_id=$1 AND first_login_completed),
         'd1',json_build_object('cohortDate',(s.today-1)::text,'cohortSize',current.cohort_size,
           'returned',current.returned,'rate',current.returned::float8/nullif(current.cohort_size,0))),
       'history',(SELECT json_agg(json_build_object('date',h.d::text,'newUsers',h.new_users,'dau',h.dau,
-          'invitedNewUsers',h.invited_new_users,'retentionDate',(h.d+1)::text,'d1Pending',h.d=s.today,
+          'invitedNewUsers',h.invited_new_users,'rewardedVideos',h.rewarded_videos,'retentionDate',(h.d+1)::text,'d1Pending',h.d=s.today,
           'cohortSize',h.new_users,'returned',next_day.returned,
           'd1Rate',next_day.returned::float8/nullif(h.new_users,0)) ORDER BY h.d)
         FROM daily h LEFT JOIN daily next_day ON next_day.d=h.d+1)
