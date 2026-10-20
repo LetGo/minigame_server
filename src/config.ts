@@ -9,6 +9,7 @@ export interface AppConfig {
   loginRateLimit: number;
   loginRateWindowSeconds: number;
   trustLocalProxy: boolean;
+  subscribeMessagesEnabled?: boolean;
 }
 
 export const CONFIG = Symbol('AppConfig');
@@ -39,6 +40,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (!/^wx[a-f0-9]{16}$/.test(appId)) throw new Error('Invalid WECHAT_APP_ID');
   const proxy = env.TRUST_LOCAL_PROXY ?? 'false';
   if (!['true', 'false'].includes(proxy)) throw new Error('Invalid TRUST_LOCAL_PROXY');
+  const subscriptions = env.SUBSCRIBE_MESSAGES_ENABLED ?? 'false';
+  if (!['true','false'].includes(subscriptions)) throw new Error('Invalid SUBSCRIBE_MESSAGES_ENABLED');
   const host = env.HOST ?? '127.0.0.1';
   if (!['127.0.0.1', '::1', '0.0.0.0'].includes(host)) throw new Error('Invalid HOST');
   if (proxy === 'true' && host !== '127.0.0.1' && host !== '::1') {
@@ -55,5 +58,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     loginRateLimit: integer('LOGIN_RATE_LIMIT', 120, 10000),
     loginRateWindowSeconds: integer('LOGIN_RATE_WINDOW_SECONDS', 60, 3600),
     trustLocalProxy: proxy === 'true',
+    subscribeMessagesEnabled: subscriptions === 'true',
   };
 }

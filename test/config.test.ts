@@ -13,6 +13,9 @@ test('configuration rejects missing secrets and unsafe configuration without exp
   assert.equal(config.port, 18740);
   assert.equal(config.sessionTtlSeconds, 604800);
   assert.equal(config.host, '127.0.0.1');
+  assert.equal(config.subscribeMessagesEnabled, false, 'subscription routes are disabled by default');
+  assert.equal(loadConfig({...valid,SUBSCRIBE_MESSAGES_ENABLED:'true'}).subscribeMessagesEnabled,true);
+  assert.throws(()=>loadConfig({...valid,SUBSCRIBE_MESSAGES_ENABLED:'yes'}),/SUBSCRIBE_MESSAGES_ENABLED/);
   assert.throws(() => loadConfig({ ...valid, WECHAT_APP_SECRET: '' }), /WECHAT_APP_SECRET/);
   assert.throws(() => loadConfig({ ...valid, PORT: '0' }), /PORT/);
   assert.throws(() => loadConfig({ ...valid, REDIS_URL: 'https://sensitive-value' }), /REDIS_URL/);

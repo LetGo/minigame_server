@@ -17,6 +17,8 @@ import { InvitesController } from './invites/invites.controller.js';
 import { ProfileController } from './users/profile.controller.js';
 import { RewardedVideoController } from './analytics/rewarded-video.controller.js';
 import { RewardedVideoService } from './analytics/rewarded-video.service.js';
+import {SubscriptionsController} from './subscriptions/subscriptions.controller.js';
+import {SubscriptionsService} from './subscriptions/subscriptions.service.js';
 
 @Catch()
 class SafeExceptionFilter implements ExceptionFilter {
@@ -46,11 +48,12 @@ export async function createApplication(config: AppConfig, overrides: { wechat?:
   try {
     const app = await NestFactory.create<NestExpressApplication>({
       module: AppModule,
-      controllers: [AuthController, DataController, InvitesController, ProfileController, RewardedVideoController],
+      controllers: [AuthController, DataController, InvitesController, ProfileController, RewardedVideoController, ...(config.subscribeMessagesEnabled ? [SubscriptionsController] : [])],
       providers: [
         { provide: Infrastructure, useValue: infrastructure },
         { provide: CONFIG, useValue: config },
         LoginRateGuard,
+        ...(config.subscribeMessagesEnabled ? [{provide: SubscriptionsService, useValue: new SubscriptionsService(config, infrastructure)}] : []),
         { provide: DataService, useValue: new DataService(config, infrastructure) },
         { provide: RewardedVideoService, useValue: new RewardedVideoService(config, infrastructure) },
         { provide: InvitesService, useValue: new InvitesService(config, infrastructure) },
