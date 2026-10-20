@@ -7,14 +7,17 @@ export interface CheckinMessageData {
   thing5: { value: string };
 }
 
+export type MiniprogramState = 'trial' | 'formal';
+
 /**
  * Builds a check-in subscription message.
  * @param openid - The user's openid (1-128 alphanumeric/underscore/hyphen)
  * @param page - The page path (1-512, no control characters or :// or leading //)
+ * @param miniprogramState - Jump target for released users: trial or formal (default trial)
  * @returns Message object for WeChat subscription API
- * @throws Error if openid or page is invalid
+ * @throws Error if openid, page or miniprogramState is invalid
  */
-export function buildCheckinMessage(openid: string, page = 'index') {
+export function buildCheckinMessage(openid: string, page = 'index', miniprogramState: MiniprogramState = 'trial') {
   // Validate openid: safe1..128 regex (alphanumeric, underscores, hyphens, length 1-128)
   // WeChat openids can contain hyphens
   const openidRegex = /^[a-zA-Z0-9_-]{1,128}$/;
@@ -31,12 +34,16 @@ export function buildCheckinMessage(openid: string, page = 'index') {
   if (page.includes('://') || page.startsWith('//')) {
     throw new Error('Invalid page');
   }
+  // Runtime validation: only the two WeChat miniprogram states, never a free-form release target.
+  if (miniprogramState !== 'trial' && miniprogramState !== 'formal') {
+    throw new Error('Invalid miniprogram_state');
+  }
 
   return {
     touser: openid,
     template_id: CHECKIN_TEMPLATE_ID,
     page,
-    miniprogram_state: 'trial',
+    miniprogram_state: miniprogramState,
     lang: 'zh_CN',
     data: {
       phrase1: { value: '未签到' },

@@ -1,4 +1,4 @@
-import {buildCheckinMessage} from './checkin-template.js';
+import {buildCheckinMessage,type MiniprogramState} from './checkin-template.js';
 export {buildCheckinMessage,CHECKIN_TEMPLATE_ID} from './checkin-template.js';
 type Outcome='not_sent'|'rejected'|'unknown';
 export class SubscriptionDeliveryError extends Error {
@@ -7,18 +7,21 @@ export class SubscriptionDeliveryError extends Error {
 /** Fixed WeChat endpoints, bounded body+deadline, no forced token refresh or send retry. */
 export class WechatSubscriptionClient {
  #credentials:{appId:string;appSecret:string};
+ #state:MiniprogramState;
  #fetcher:typeof fetch;
  #now:()=>number;
  #timeoutMs:number;
  #cache:{token:string;expiresAt:number}|undefined;
  #pending:Promise<string>|undefined;
- constructor(credentials:{appId:string;appSecret:string},fetcher:typeof fetch=globalThis.fetch,options:{now?:()=>number;timeoutMs?:number}={}){
-  this.#credentials={...credentials};this.#fetcher=fetcher;this.#now=options.now??Date.now;this.#timeoutMs=options.timeoutMs??5000;
+ constructor(credentials:{appId:string;appSecret:string;subscribeMiniprogramState?:MiniprogramState},fetcher:typeof fetch=globalThis.fetch,options:{now?:()=>number;timeoutMs?:number}={}){
+  this.#credentials={appId:credentials.appId,appSecret:credentials.appSecret};this.#fetcher=fetcher;this.#now=options.now??Date.now;this.#timeoutMs=options.timeoutMs??5000;
+  this.#state=credentials.subscribeMiniprogramState??'trial';
+  if(this.#state!=='trial'&&this.#state!=='formal')throw new SubscriptionDeliveryError('not_sent');
   if(!Number.isInteger(this.#timeoutMs)||this.#timeoutMs<1||this.#timeoutMs>5000)throw new SubscriptionDeliveryError('not_sent');
  }
  async send(openid:string,page='index'):Promise<void>{
   let payload:ReturnType<typeof buildCheckinMessage>;
-  try{payload=buildCheckinMessage(openid,page);}catch{throw new SubscriptionDeliveryError('not_sent');}
+  try{payload=buildCheckinMessage(openid,page,this.#state);}catch{throw new SubscriptionDeliveryError('not_sent');}
   let token:string;try{token=await this.#stableToken();}catch{throw new SubscriptionDeliveryError('not_sent');}
   let data:unknown;
   try{data=await this.#request('https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token='+encodeURIComponent(token),payload);}catch{throw new SubscriptionDeliveryError('unknown');}

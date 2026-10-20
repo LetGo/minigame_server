@@ -35,7 +35,8 @@ export class SubscriptionsService {
  }
  async template(request:Request){
   await this.session(request);this.body(request,false);
-  return {templateId:CHECKIN_TEMPLATE_ID,templateNumber:CHECKIN_TEMPLATE_NUMBER,type:'once',miniprogramState:'trial',data:buildCheckinMessage('preview_only').data};
+  const payload=buildCheckinMessage('preview_only','index',this.config.subscribeMiniprogramState??'trial');
+  return {templateId:CHECKIN_TEMPLATE_ID,templateNumber:CHECKIN_TEMPLATE_NUMBER,type:'once',miniprogramState:payload.miniprogram_state,data:payload.data};
  }
  async report(request:Request){
   const uid=await this.session(request),body=this.body(request,true);

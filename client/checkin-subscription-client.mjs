@@ -14,7 +14,7 @@ export function createCheckinSubscriptionClient(options) {
   // Canonical base64url encoding of the server's 32-byte opaque login token.
   if (typeof accessToken !== 'string' || !/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/.test(accessToken) ||
       !wx || typeof wx.request !== 'function' || typeof baseUrl !== 'string' ||
-      !/^https:\/\/[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[1-9][0-9]{0,4})?\/h5login-test$/.test(baseUrl)) {
+      !/^https:\/\/[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[1-9][0-9]{0,4})?\/h5login(?:-test)?$/.test(baseUrl)) {
     throw new Error('INVALID_CLIENT_OPTIONS');
   }
   function reportResult(input) {

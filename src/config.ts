@@ -10,6 +10,7 @@ export interface AppConfig {
   loginRateWindowSeconds: number;
   trustLocalProxy: boolean;
   subscribeMessagesEnabled?: boolean;
+  subscribeMiniprogramState?: 'trial' | 'formal';
 }
 
 export const CONFIG = Symbol('AppConfig');
@@ -42,6 +43,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (!['true', 'false'].includes(proxy)) throw new Error('Invalid TRUST_LOCAL_PROXY');
   const subscriptions = env.SUBSCRIBE_MESSAGES_ENABLED ?? 'false';
   if (!['true','false'].includes(subscriptions)) throw new Error('Invalid SUBSCRIBE_MESSAGES_ENABLED');
+  const miniprogramState = env.SUBSCRIBE_MINIPROGRAM_STATE ?? 'trial';
+  if (miniprogramState !== 'trial' && miniprogramState !== 'formal') throw new Error('Invalid SUBSCRIBE_MINIPROGRAM_STATE');
   const host = env.HOST ?? '127.0.0.1';
   if (!['127.0.0.1', '::1', '0.0.0.0'].includes(host)) throw new Error('Invalid HOST');
   if (proxy === 'true' && host !== '127.0.0.1' && host !== '::1') {
@@ -59,5 +62,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     loginRateWindowSeconds: integer('LOGIN_RATE_WINDOW_SECONDS', 60, 3600),
     trustLocalProxy: proxy === 'true',
     subscribeMessagesEnabled: subscriptions === 'true',
+    subscribeMiniprogramState: miniprogramState,
   };
 }

@@ -1,0 +1,27 @@
+[Unit]
+Description=PRODUCTION check-in reminder: subscribed users without login today
+Requires=minigame-infrastructure.service
+After=minigame-infrastructure.service network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/.hermes/workspace/projects/minigame_server
+ExecStart=/usr/bin/node runtime/production-checkin/current/ops/run-production-checkin.mjs --send
+Restart=no
+TimeoutStartSec=1h
+TimeoutStopSec=20
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+UMask=0077
+MemoryMax=192M
+CPUQuota=30%
+StandardOutput=journal
+StandardError=journal

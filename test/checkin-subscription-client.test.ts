@@ -53,17 +53,44 @@ test('click invokes exact WeChat template synchronously before any network and r
 });
 
 
-test('validates canonical opaque Bearer, HTTPS staging-only base and rejects identity/config overrides before side effects', async () => {
+test('explicit production base URL reports to the production API', async () => {
+  const create = await factory();
+  const urls: string[] = [];
+  const client = create({ baseUrl: 'https://sub2api.wdaveh5game.com/h5login', accessToken: token, wx: {
+    requestSubscribeMessage(o: any) { o.success({ errMsg: 'requestSubscribeMessage:ok', [templateId]: 'accept' }); },
+    request(o: any) {
+      urls.push(o.url);
+      assert.equal(o.header.Authorization, 'Bearer ' + token);
+      assert.deepEqual(o.data, { eventId, templateId, status: 'accept' });
+      o.success({ statusCode: 200, data: receipt() });
+    },
+  } });
+  assert.deepEqual(await client.requestSubscription(eventId), receipt());
+  assert.deepEqual(await client.reportResult({ eventId, status: 'accept' }), receipt());
+  assert.deepEqual(urls, [
+    'https://sub2api.wdaveh5game.com/h5login/api/subscriptions/checkin/report',
+    'https://sub2api.wdaveh5game.com/h5login/api/subscriptions/checkin/report',
+  ]);
+});
+
+
+test('validates canonical opaque Bearer, exact HTTPS base paths and rejects identity/config overrides before side effects', async () => {
   const create = await factory();
   const wx = { request() { assert.fail('no network'); }, requestSubscribeMessage() { assert.fail('no prompt'); } };
   for (const accessToken of [undefined, '', 'Bearer ' + token, token + ' ', 'x'.repeat(42) + 'B', 'x'.repeat(44), 'a\n'.repeat(22)]) {
     assert.throws(() => create({ wx, accessToken }), /INVALID_CLIENT_OPTIONS/);
   }
-  for (const baseUrl of ['http://example.com/h5login-test', 'https://example.com/h5login',
-    'https://example.com/h5login-test/', 'https://example.com/h5login-test/api',
-    'https://u:p@example.com/h5login-test', 'https://example.com/h5login-test?x=1',
-    'https://example.com/h5login-test#x', 'https://example.com/h5login-test/../h5login']) {
-    assert.throws(() => create({ wx, accessToken: token, baseUrl }), /INVALID_CLIENT_OPTIONS/);
+  for (const path of ['h5login', 'h5login-test']) {
+    for (const baseUrl of [`http://example.com/${path}`, 'https://example.com/other',
+      `https://example.com/${path}/`, `https://example.com/${path}/api`,
+      `https://u:p@example.com/${path}`, `https://example.com/${path}?x=1`,
+      `https://example.com/${path}#x`, `https://example.com/${path}/../h5login`,
+      `https://example.com/${path}?`, `https://example.com/${path}#`,
+      ` https://example.com/${path}`, `https://example.com/${path} `,
+      `https://EXAMPLE.com/${path}`, `https://example.com:0/${path}`,
+      `https://example.com/%68${path.slice(1)}`]) {
+      assert.throws(() => create({ wx, accessToken: token, baseUrl }), /INVALID_CLIENT_OPTIONS/);
+    }
   }
   for (const override of [{ userId: eventId }, { uid: eventId }, { openid: 'other' }, { templateId: 'other' }]) {
     assert.throws(() => create({ wx, accessToken: token, ...override }), /INVALID_CLIENT_OPTIONS/);

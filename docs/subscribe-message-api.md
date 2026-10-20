@@ -1,22 +1,24 @@
-# 签到提醒订阅消息：测试服接入与每日9点提醒
+# 签到提醒订阅消息：正式服/测试服接入与每日9点提醒
 
-> 仅测试服。已完成真实单用户收件和体验版跳转验证；新增每天北京时间 **09:00** 的服务端定时提醒，仅面向订阅且当天尚未登录的测试服玩家。正式服不发布、不启用。
+> 正式服与测试服均提供订阅上报接口及每天北京时间 **09:00** 的服务端提醒，只面向本环境已订阅且当天尚未登录的玩家。正式服点击消息进入正式版，测试服进入体验版。测试服已完成真实单用户收件和体验版跳转验证；正式服首轮定时收件另行验证。
 
 ## 固定内容与边界
 
+- 正式服 baseUrl：`https://sub2api.wdaveh5game.com/h5login`（不含 `/api`）。
 - 测试服 baseUrl：`https://sub2api.wdaveh5game.com/h5login-test`（不含 `/api`）。
+- 下方协议示例使用测试服地址；正式服把 `/h5login-test` 替换成 `/h5login`，并使用**正式服登录得到的 token**。UID、登录会话、订阅上报与发送记录按环境隔离，不迁移测试服记录。
 - 固定模板 ID：`2QYSHFLi0JmD9vcoKqXLEzGwCRibBAqvpl7nHjA66v4`；模板库编号 **85**；类型 `once`。
 - 固定 `phrase1.value`：`未签到`。
 - 固定 `thing10.value`：`签到领海量奖励`。
 - 固定 `thing5.value`：`您的猫咪提示您有海量钻石待领取`。
 - 依用户要求，来源标签/消息状态始终使用 `未签到`；**没有真实服务端签到系统，也没有签到状态判断或钻石发放逻辑**。
-- 消息跳转环境固定 `miniprogram_state: "trial"`，手动发送脚本默认 `page: "index"`；可显式指定游戏内页面。
-- **测试服与正式服使用同一个微信 AppID，微信订阅权限/一次性次数并不是两套沙箱。`trial` 只控制点击卡片打开体验版；真实试发仍会消耗该测试玩家在微信端的订阅机会，因此仅在已授权的测试服范围内、符合订阅及当天未登录条件时发送。**
+- 消息跳转环境由服务端固定：正式服 `miniprogram_state: "formal"`，测试服 `"trial"`；默认 `page: "index"`，客户端不能覆盖跳转环境。
+- **测试服与正式服使用同一个微信 AppID，微信订阅权限/一次性次数并不是两套沙箱。`trial` 仅控制跳转体验版；任一环境的真实发送都可能消耗微信端同一用户、同一模板的订阅机会。两套本地记录不能证明微信有两份独立额度。**
 - 登录 API 返回的 `accessToken` 是游戏服务端会话凭证，不是微信服务端 `access_token`。客户端不得接触 AppSecret 或微信服务端发送凭证。
 
 ## 公共客户端接口
 
-所有请求使用 HTTPS、`POST`、`Content-Type: application/json` 和 `Authorization: Bearer <测试服登录 accessToken>`。身份只由服务端会话确定；不要提交 `openid`、`userId`、`uid`、`appId` 等身份覆盖字段，也不要放入 URL。正式服 token/UID 不可混用于测试服。
+所有请求使用 HTTPS、`POST`、`Content-Type: application/json` 和 `Authorization: Bearer <本环境登录 accessToken>`。身份只由服务端会话确定；不要提交 `openid`、`userId`、`uid`、`appId` 等身份覆盖字段，也不要放入 URL。正式服 token/UID 不可混用于测试服。
 
 ### 1. 查询模板（可选，不能插在点击与订阅 API 之间）
 
@@ -78,7 +80,7 @@ import { createCheckinSubscriptionClient } from './checkin-subscription-client.m
 const client = createCheckinSubscriptionClient({
   wx,
   accessToken: stagingLoginResult.accessToken,
-  // 默认就是测试服；自定义地址也必须为 HTTPS 且精确以 /h5login-test 结尾。
+  // 默认仍是测试服；正式服必须显式传 https://sub2api.wdaveh5game.com/h5login。
   baseUrl: 'https://sub2api.wdaveh5game.com/h5login-test',
 });
 ```
@@ -87,7 +89,7 @@ const client = createCheckinSubscriptionClient({
 
 - 工厂同步校验 32 字节登录 token 的规范 base64url 表示（43 字符），只接收原 token，不接收带 `Bearer ` 的字符串、空白、非规范尾位。
 - `eventId` 必须由调用方提供规范小写 UUID（版本 1–8、RFC variant）；不接受大写、空白、nil UUID。不使用 crypto/随机 API 生成 ID；调用方使用自己可靠的 UUID 生成机制，**不要用 UID 当 eventId**。
-- 仅接受精确的 HTTPS `/h5login-test` base，拒绝 `/h5login` 正式服、`/api`、尾斜杠、凭证、查询/片段和路径穿越。自定义测试域名需加入微信 request 合法域名；helper 校验不代替后端环境隔离。
+- 仅接受精确的 HTTPS `/h5login-test`（测试服）或 `/h5login`（正式服）base，拒绝 `/api`、尾斜杠、凭证、查询/片段和路径穿越。默认仍为测试服，不自动切换或回退环境；正式服须显式指定 baseUrl 并使用正式服 token。自定义域名需加入微信 request 合法域名；helper 校验不代替后端环境隔离。
 - `requestSubscription` 内部 Promise executor 同步调用 `wx.requestSubscribeMessage`，在它之前无网络、无 `await`。随后仅上报实际回调状态与原 UUID。`wx.request` 以回调封装 Promise，不把 RequestTask 当结果。
 - 不读写凭证存储、不日志输出原始错误、不自动重试。缺少订阅 API 返回 `SUBSCRIPTION_API_UNAVAILABLE`；取消/调用失败返回 `SUBSCRIPTION_REQUEST_FAILED`；无效回调返回 `INVALID_SUBSCRIPTION_CALLBACK`，均不产生 pendingReport。
 - 上报网络/SDK 抛错返回 `SUBSCRIPTION_NETWORK_ERROR`，HTTP 非 200 返回 `SUBSCRIPTION_REQUEST_FAILED`（可带 `statusCode`），无效响应返回 `INVALID_SUBSCRIPTION_RESPONSE`。这些上报错误附带安全的 `error.pendingReport = {eventId, status}`，不含 token/openid/原始响应；它仅表示待核对/重试的观察事件，不保证每种 HTTP 错误都适合立即重试。
@@ -168,13 +170,13 @@ node ops/send-checkin-subscription.mjs --user-id UUID_FROM_STAGING_LOGIN --send 
 2. 后端 fixtures/接口测试只证明服务端契约和隔离，不证明真实用户微信同意或收到了消息。
 3. 已在2026-10-20完成真实玩家订阅、手动发送、玩家确认微信收件及体验版跳转；这不等于每日定时批次已实际执行，首次定时运行仍需单独核验。
 
-## 每日北京时间09:00提醒（仅测试服）
+## 每日北京时间09:00提醒（正式服/测试服）
 
-前端接口和授权按钮接法不变，不新增客户端群发接口。服务端 `minigame-staging-checkin.timer` 每天按 `Asia/Shanghai` 09:00触发，普通玩家不能指定接收人或启动任务。
+前端接口和授权按钮接法不变，不新增客户端群发接口。正式服 `minigame-production-checkin.timer`、测试服 `minigame-staging-checkin.timer` 分别每天按 `Asia/Shanghai` 09:00触发，普通玩家不能指定接收人或启动任务。
 
 ### 筛选与去重
 
-- 只处理同AppID、已完成登录注册的测试服账号；最新的本模板回调必须是 `accept`。
+- 只处理本环境同AppID、已完成登录注册的账号；最新的本模板回调必须是 `accept`。
 - “当天”是北京时间 `[00:00, 次日00:00)`；当天存在成功登录日记录，或最近成功登录时间落在当天，均跳过。不按在线状态、签到接口或广告事件判断。
 - 发送前在用户行锁内再次读取登录和订阅信息；如果在等待期间已登录、撤回/拒绝或授权观察已经被发送尝试使用，则跳过。预约提交与外部微信调用无法组成跨系统原子事务：最终检查后瞬间新登录或新上报拒绝仍存在极小竞态，不声称完全消除。
 - 不把多条 `accept` 累加为微信发送次数。保守地仅使用最新且晚于已有发送尝试的授权观察；手动试发也会使该观察不再用于自动任务。已消耗后需再次真实点击订阅，不能换eventId伪造次数。
@@ -188,25 +190,31 @@ node ops/send-checkin-subscription.mjs --user-id UUID_FROM_STAGING_LOGIN --send 
 只读预览（不发送、不消耗微信权限）：
 
 ```sh
+# 正式服
+node runtime/production-checkin/current/ops/run-production-checkin.mjs
+# 测试服
 node ops/run-daily-checkin.mjs
 ```
 
-定时器使用受限的 `--send` 入口，必须同时满足测试服地址硬校验、`SUBSCRIBE_MESSAGES_ENABLED=true` 和 `STAGING_DAILY_CHECKIN_ENABLED=true`；不提供环境、日期、时间、OpenID或接收人覆盖参数。不要为补跑而调整服务器时间或直接改数据库回执。
+定时器使用受限的 `--send` 入口。正式服必须同时满足正式服地址硬校验、`SUBSCRIBE_MESSAGES_ENABLED=true`、`SUBSCRIBE_MINIPROGRAM_STATE=formal` 和 `PRODUCTION_DAILY_CHECKIN_ENABLED=true`；测试服必须满足测试服硬校验及 `SUBSCRIBE_MESSAGES_ENABLED=true`、`STAGING_DAILY_CHECKIN_ENABLED=true`。不提供环境、日期、时间、OpenID或接收人覆盖参数。不要为补跑而调整服务器时间或直接改数据库回执。
 
 查看状态和日志：
 
 ```sh
-systemctl list-timers minigame-staging-checkin.timer
+systemctl list-timers minigame-production-checkin.timer minigame-staging-checkin.timer
+journalctl -u minigame-production-checkin.service --no-pager
 journalctl -u minigame-staging-checkin.service --no-pager
 ```
 
 暂停后续自动提醒（不影响API或手动试发）：
 
 ```sh
+sudo systemctl disable --now minigame-production-checkin.timer
+# 测试服需单独暂停：
 sudo systemctl disable --now minigame-staging-checkin.timer
 ```
 
-正式服保持未启用；测试/正式共用微信AppID的一次性权限风险仍适用。实际定时收件需要符合条件的真实玩家，不能用模拟授权或测试替身宣称已送达。
+两环境分别筛选各自的订阅记录；不迁移测试服授权观察至正式服，不清空任何真实订阅或发送历史。测试/正式共用微信AppID的一次性权限风险仍适用。实际定时收件需要符合条件的真实玩家，不能用模拟授权或测试替身宣称已送达。
 
 ## 参考与本地验证
 
