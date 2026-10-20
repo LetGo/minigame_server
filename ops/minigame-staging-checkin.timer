@@ -1,0 +1,12 @@
+[Unit]
+Description=STAGING daily check-in reminder at 09:00 Asia/Shanghai
+
+[Timer]
+OnCalendar=*-*-* 09:00:00 Asia/Shanghai
+AccuracySec=1s
+RandomizedDelaySec=0
+Persistent=false
+Unit=minigame-staging-checkin.service
+
+[Install]
+WantedBy=timers.target
