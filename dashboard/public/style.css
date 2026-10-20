@@ -564,6 +564,84 @@ body.dark .metric-card {
 .history-table-container { overflow-x: auto; }
 .login-logs-table { min-width: 600px; }
 .login-logs-table td { overflow-wrap: anywhere; }
+/* Production status panel (overview) */
+.production-status-host { margin: 0 0 2rem; }
+.production-status {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.5rem;
+    box-shadow: var(--shadow);
+}
+body.dark .production-status { box-shadow: var(--shadow-dark); }
+.status-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .75rem;
+    margin-bottom: .5rem;
+}
+.status-head h2 {
+    font-size: 1rem;
+    margin: 0;
+}
+.status-badge {
+    padding: .15rem .6rem;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    font-size: .75rem;
+    font-weight: 600;
+    line-height: 1.4;
+}
+.status-badge-ok { color: #1a7f45; }
+.status-badge-bad { color: #c0392b; }
+.status-badge-unknown { color: var(--color-muted); }
+.status-meta,
+.status-message {
+    font-size: .8125rem;
+    color: var(--color-muted);
+    margin-bottom: .75rem;
+}
+.status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+}
+.status-item {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: .75rem .875rem;
+}
+.status-item-label {
+    font-size: .8125rem;
+    color: var(--color-muted);
+    margin-bottom: .25rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+}
+.status-item-value {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: .25rem;
+}
+.status-value-ok { color: #1a7f45; }
+.status-value-bad { color: #c0392b; }
+.status-value-unknown { color: var(--color-muted); }
+.status-item-detail {
+    font-size: .8125rem;
+    color: var(--color-muted);
+    overflow-wrap: anywhere;
+}
+.status-note {
+    font-size: .8125rem;
+    color: var(--color-muted);
+    margin-top: 1rem;
+    padding-top: .75rem;
+    border-top: 1px solid var(--color-border);
+}
+@media (max-width: 720px) {
+    .status-grid { grid-template-columns: 1fr; }
+}
 /* Accessibility */
 :focus-visible {
     outline: 2px solid var(--color-primary);
