@@ -18,8 +18,15 @@ test('login logs require authenticated session, correct Origin and ordinary JSON
 });
 test('login log input is bounded and only explicit offset is forwarded',async t=>{
  const calls=[];const f=await fixture(t,async(pool,appId,offset)=>{calls.push([pool,appId,offset]);return {offset,limit:50,total:80,hasMore:offset<50,items:[]};});
- for(const body of [{offset:-1},{offset:1.5},{offset:'0'},{offset:null},{offset:10000001},{offset:0,limit:5000},{offset:0,sql:'SELECT 1'},{date:'2026-10-19'}])await f.post(body).expect(400).then(r=>assert.equal(r.body.message,'INVALID_REQUEST'));
+ for(const body of [{offset:-1},{offset:1.5},{offset:'0'},{offset:null},{offset:10000001},{offset:0,limit:5000},{offset:0,sql:'SELECT 1'}])await f.post(body).expect(400).then(r=>assert.equal(r.body.message,'INVALID_REQUEST'));
  assert.equal(calls.length,0);await f.post({}).expect(200).then(r=>assert.equal(r.body.offset,0));await f.post({offset:50}).expect(200).then(r=>{assert.equal(r.body.offset,50);assert.equal(r.body.hasMore,false);});await f.post({offset:10000000}).expect(200);assert.deepEqual(calls,[[f.pool,config.appId,0],[f.pool,config.appId,50],[f.pool,config.appId,10000000]]);
+});
+test('login log date is optional, calendar-valid and forwarded without changing pagination',async t=>{
+ const calls=[];const f=await fixture(t,async(_pool,_app,offset,date)=>{calls.push({offset,date});return {offset,date};});
+ await f.post({date:'2026-10-19',offset:50}).expect(200);await f.post({date:'2024-02-29'}).expect(200);await f.post({}).expect(200);
+ assert.deepEqual(calls,[{offset:50,date:'2026-10-19'},{offset:0,date:'2024-02-29'},{offset:0,date:null}]);
+ for(const date of [null,'','2026-02-29','2026-04-31','2026-13-01','2026-00-01','2026-10-00','2026-1-01','0000-01-01','2026-10-19T00:00:00Z','2026-10-19\' OR true--',20261019,[],{}])await f.post({date}).expect(400).then(r=>assert.equal(r.body.message,'INVALID_REQUEST'));
+ assert.equal(calls.length,3,'invalid dates never reach the query');
 });
 test('login log storage errors fail closed without leaking private details',async t=>{
  const f=await fixture(t,async()=>{throw Error('private database password');});const r=await f.post({offset:0}).expect(503);assert.equal(r.body.message,'DASHBOARD_UNAVAILABLE');assert(!r.text.includes('private'));f.redis.get=async()=>{throw Error('private redis');};await f.post({offset:0}).expect(503).then(r=>assert(!r.text.includes('private')));
