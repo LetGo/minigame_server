@@ -89,6 +89,14 @@
 - 18 单测、8 后台、77 集成、2 运维通过，audit 0，独立审查通过。公网 HTML/JS/API/DOM 与数据库独立聚合交叉核对 72 项通过，原后台 26 项回归通过。非真实浏览器验收。
 - 证据 `tmp/dashboard-invited-registrations/`；临时自动化 Compose 已停止，未创建正式玩家验证数据。
 
+## 登录日志日期筛选发布（2026-10-21，北京时间）
+
+- 用户明确确认发布；功能提交 `2809712`。正式后台快照 `runtime/dashboard/releases/20261021T035304Z-2809712-login-date`，从上一活动快照复制，仅替换 `dashboard/backend.js`、`dashboard/queries.mjs`、`dashboard/public/app.js`；上一快照保留用于回滚。
+- 默认北京时间当天，选择其他日期自动从第一页查询，翻页与刷新保留日期。后端严格校验真实 `YYYY-MM-DD` 日期并参数化查询，兼容省略日期；`date` 与实际当天 `today` 分开返回。
+- 类型检查、48 单测、62 后台测试、148 隔离 PG/Redis 集成及 2 运维测试通过，独立代码审查无阻断项。正式 HTTPS 验收覆盖默认/历史/空日期、两页完整数据与独立只读 SQL 核对、非法日期 400、未登录 401、概览及退出；公开前端 DOM harness 验证日期切换/翻页/刷新/空态（非真实浏览器）。
+- 仅重启看板；发布前既有会话发布后继续有效。正式游戏 API、常驻测试服与 noderun 的 PID/启动标识保持不变；118 个受保护产物、迁移、环境及 noderun 配置文件哈希与 Nginx 有效配置哈希不变。无迁移、无玩家数据写入、无凭据变更。
+- 发布与验证证据：`tmp/dashboard-login-date-release/{manifest,release-verification,public-verification}.json`。
+
 ## 发布/恢复注意事项
 
 发布须获用户明确授权。先全量测试、独立审查、正式备份及临时库实际恢复验证；再用生产 owner 执行 `node ops/dashboard-admin.mjs prepare`（迁移、最小权限及首次凭据生成），切换正式游戏 API 和后台服务；健康后安装 Nginx 路由并 `nginx -t`/reload，最后实际 HTTPS 登录/查询/退出及数据库回读。
