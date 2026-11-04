@@ -3,6 +3,9 @@
 !.env.example
 node_modules/
 dist/
+# Immutable runtime rollback artifacts; never publish compiled releases or backups.
+.dist-retired-*/
+.dist-candidate-*/
 coverage/
 tmp/
 runtime/

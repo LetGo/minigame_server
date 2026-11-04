@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily Beijing 00:10 completed-day retention snapshot
+
+[Timer]
+OnCalendar=*-*-* 00:10:00 Asia/Shanghai
+Persistent=true
+AccuracySec=1s
+RandomizedDelaySec=0
+Unit=minigame-retention-report.service
+
+[Install]
+WantedBy=timers.target

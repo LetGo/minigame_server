@@ -48,7 +48,9 @@ test('login HTTP flow with real isolated PostgreSQL and Redis (WeChat transport 
     assert.match(response.body.accessToken, /^[A-Za-z0-9_-]{43}$/);
     assert.match(response.body.user.id, /^[0-9a-f-]{36}$/);
     assert.equal(response.body.user.openid, 'player_one');
-    assert.deepEqual(Object.keys(response.body.user).sort(), ['id', 'openid']);
+    assert.deepEqual(Object.keys(response.body.user).sort(), ['avatarUrl', 'id', 'nickname', 'openid']);
+    assert.equal(response.body.user.nickname, null);
+    assert.equal(response.body.user.avatarUrl, null);
     assert.doesNotMatch(JSON.stringify(response.body), /session_key|upstream-private-key|integration-test-only/);
     assert.equal(response.headers['cache-control'], 'no-store');
     const rows = await pool.query('SELECT id, app_id, open_id FROM game_users');

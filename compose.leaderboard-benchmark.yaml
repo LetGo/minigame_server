@@ -1,0 +1,34 @@
+# Disposable only: never reuse production/staging ports, volumes or credentials.
+services:
+  postgres:
+    image: postgres:18-alpine@sha256:96d56f7f57c6aacd1fcb908bc83b345ec5f83231ee486dd66a1baadce274db88
+    # Small shared buffers/WAL budget keep million-row tmpfs fixtures inside
+    # the disposable 768MiB cgroup. These are benchmark-only settings.
+    command: ["postgres", "-c", "shared_buffers=32MB", "-c", "max_wal_size=64MB", "-c", "min_wal_size=32MB", "-c", "checkpoint_timeout=60s", "-c", "wal_compression=on", "-c", "maintenance_work_mem=32MB", "-c", "jit=off"]
+    environment:
+      POSTGRES_USER: minigame_benchmark
+      POSTGRES_PASSWORD: disposable_benchmark_only
+      POSTGRES_DB: minigame_benchmark
+    ports:
+      - "127.0.0.1:15442:5432"
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U minigame_benchmark -d minigame_benchmark"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    mem_limit: 768m
+    cpus: 1.0
+  redis:
+    image: redis:8-alpine@sha256:09160599abd229764c0fb44cb6be640294e1d360a54b19985ab4843dcf2d90f1
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "127.0.0.1:16392:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    mem_limit: 384m
+    cpus: 1.0

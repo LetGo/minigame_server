@@ -112,20 +112,29 @@ export class InvitesService {
 
   async profile(request: Request) {
     const { userId } = await this.session(request);
-    const { nickname, avatarUrl } = this.body(request, ['nickname', 'avatarUrl'], ['nickname', 'avatarUrl']);
+    const body = this.body(request, ['nickname', 'avatarUrl'], ['nickname']);
+    const { nickname, avatarUrl: inputAvatarUrl } = body;
+    const avatarProvided = Object.hasOwn(body, 'avatarUrl');
+    const avatarUrl = !avatarProvided || inputAvatarUrl === '' || inputAvatarUrl === null ? null : inputAvatarUrl;
     if (typeof nickname !== 'string' || [...nickname].length < 1 || [...nickname].length > 64 || !nickname.trim() || CONTROL.test(nickname)
-      || Buffer.from(nickname, 'utf8').toString('utf8') !== nickname || typeof avatarUrl !== 'string'
-      || avatarUrl.length < 1 || avatarUrl.length > 2048 || CONTROL.test(avatarUrl) || avatarUrl.trim() !== avatarUrl
-      || Buffer.from(avatarUrl, 'utf8').toString('utf8') !== avatarUrl) throw new BadRequestException('INVALID_PROFILE');
-    try {
-      const url = new URL(avatarUrl);
-      if (url.protocol !== 'https:' || !url.hostname || url.username || url.password) throw new Error('Invalid avatar URL');
-    } catch { throw new BadRequestException('INVALID_PROFILE'); }
-    await this.database(() => this.infrastructure.pool.query(
-      `INSERT INTO game_profiles(user_id,nickname,avatar_url) VALUES($1,$2,$3)
-       ON CONFLICT(user_id) DO UPDATE SET nickname=EXCLUDED.nickname,avatar_url=EXCLUDED.avatar_url,updated_at=now()`,
-      [userId, nickname, avatarUrl]));
-    return { user: { id: userId, nickname, avatarUrl } };
+      || Buffer.from(nickname, 'utf8').toString('utf8') !== nickname) throw new BadRequestException('INVALID_PROFILE');
+    if (avatarUrl !== null) {
+      if (typeof avatarUrl !== 'string' || avatarUrl.length > 2048 || CONTROL.test(avatarUrl) || avatarUrl.trim() !== avatarUrl
+        || Buffer.from(avatarUrl, 'utf8').toString('utf8') !== avatarUrl) throw new BadRequestException('INVALID_PROFILE');
+      try {
+        const url = new URL(avatarUrl);
+        if (url.protocol !== 'https:' || !url.hostname || url.username || url.password) throw new Error('Invalid avatar URL');
+      } catch { throw new BadRequestException('INVALID_PROFILE'); }
+    }
+    const saved = await this.database(() => this.infrastructure.pool.query<{ nickname: string; avatar_url: string | null }>(
+       `INSERT INTO game_profiles(user_id,nickname,avatar_url) VALUES($1,$2,$3)
+       ON CONFLICT(user_id) DO UPDATE SET nickname=EXCLUDED.nickname,
+         avatar_url=CASE WHEN $4::boolean THEN EXCLUDED.avatar_url ELSE game_profiles.avatar_url END,updated_at=now()
+       RETURNING nickname,avatar_url`,
+      [userId, nickname, avatarUrl, avatarProvided]));
+    const profile = saved.rows[0];
+    if (!profile) throw new ServiceUnavailableException('INVITE_STORAGE_UNAVAILABLE');
+    return { user: { id: userId, nickname: profile.nickname, avatarUrl: profile.avatar_url } };
   }
 
   async report(request: Request) {
@@ -242,4 +251,5 @@ export class InvitesService {
     });
     return { claimId: row.claim_id, rewardClaimed: true, rewardClaimedAt: row.reward_claimed_at.toISOString() };
   }
+
 }

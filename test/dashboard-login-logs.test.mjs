@@ -31,7 +31,55 @@ test('login log date is optional, calendar-valid and forwarded without changing 
 test('login log storage errors fail closed without leaking private details',async t=>{
  const f=await fixture(t,async()=>{throw Error('private database password');});const r=await f.post({offset:0}).expect(503);assert.equal(r.body.message,'DASHBOARD_UNAVAILABLE');assert(!r.text.includes('private'));f.redis.get=async()=>{throw Error('private redis');};await f.post({offset:0}).expect(503).then(r=>assert(!r.text.includes('private')));
 });
-test('login log query binds game and offset, uses daily first time and adds no deduplication',async()=>{
+test('login log query binds game and offset, keeps daily first time and adds no global deduplication',async()=>{
  assert.equal(typeof queries.loginLogs,'function');const result={items:[],total:0};let captured;
  const returned=await queries.loginLogs({query:async(sql,args)=>{captured={sql,args};return {rows:[{result}]};}},config.appId,50);assert.equal(returned,result);assert(captured.args.includes(config.appId));assert(captured.args.includes(50));assert.match(captured.sql,/game_daily_logins/);assert.match(captured.sql,/first_login_at/);assert.match(captured.sql,/Asia\/Shanghai/);assert.doesNotMatch(captured.sql,/\bDISTINCT\b/i);assert(!captured.sql.includes(config.appId));
+});
+// New contract: game_login_events records every successful login, so each event is its own row and
+// carries the scene reported by THAT login; the first-registration source scene stays a separate field.
+test('login log query reads each successful login event with its own scene and app scope',async()=>{
+ let captured;
+ await queries.loginLogs({query:async(sql,args)=>{captured={sql,args};return {rows:[{result:{items:[]}}]};}},config.appId,0,null);
+ assert.match(captured.sql,/game_login_events/);
+ assert.match(captured.sql,/UNION ALL/);
+ assert.match(captured.sql,/'loginScene',\s*scene/);
+ assert.match(captured.sql,/'sourceScene',\s*source_scene/);
+ assert.match(captured.sql,/e\.app_id=\$1/);
+ assert.doesNotMatch(captured.sql,/\bDISTINCT\b/i);
+ assert.doesNotMatch(captured.sql,/'eventId'/,'internal bigint event ids are not exposed to the page');
+ assert.deepEqual(captured.args,[config.appId,0,null]);
+});
+// Historical coverage: a daily row is only an extra compatibility row when NO event carries that exact
+// first_login_at; otherwise the per-login event already represents the same login.
+test('legacy daily rows remain only when no event matches their exact first login time',async()=>{
+ let captured;
+ await queries.loginLogs({query:async(sql,args)=>{captured={sql,args};return {rows:[{result:{items:[]}}]};}},config.appId,0,'2026-10-19');
+ assert.match(captured.sql,/NOT EXISTS\s*\(\s*SELECT 1 FROM game_login_events/);
+ assert.match(captured.sql,/e\.login_at\s*=\s*l\.first_login_at/);
+ assert.match(captured.sql,/NULL::bigint AS event_id/);
+ assert.match(captured.sql,/NULL::int AS scene/);
+ assert.match(captured.sql,/l\.activity_date=s\.selected_date/);
+ assert.match(captured.sql,/u\.first_login_completed/);
+ assert.deepEqual(captured.args,[config.appId,0,'2026-10-19']);
+});
+// One union feeds the page, the total and hasMore; ordering is login time DESC, then uid, then the
+// event id so repeated identical timestamps paginate deterministically.
+test('login log count and pagination cover the union with stable tie-breaking',async()=>{
+ let captured;
+ await queries.loginLogs({query:async(sql,args)=>{captured={sql,args};return {rows:[{result:{items:[]}}]};}},config.appId,50);
+ assert.match(captured.sql,/matching AS MATERIALIZED \(SELECT \* FROM events UNION ALL SELECT \* FROM legacy\)/);
+ assert.match(captured.sql,/count\(\*\)::float8 AS total FROM matching/);
+ assert.match(captured.sql,/ORDER BY login_at DESC,user_id DESC,event_id DESC NULLS LAST/);
+ assert.equal(captured.sql.match(/ORDER BY login_at DESC,user_id DESC,event_id DESC NULLS LAST/g)?.length,2,'page and JSON aggregate use the same stable order');
+ assert.match(captured.sql,/LIMIT 50 OFFSET \$2::int/);
+ assert.match(captured.sql,/'hasMore',\(\$2::int\+50\)<t\.total/);
+});
+// The day filter must stay a half-open range on the timestamp so the app+login_at index is usable.
+test('login log day filter is a half-open Beijing range for both sources',async()=>{
+ let captured;
+ await queries.loginLogs({query:async(sql,args)=>{captured={sql,args};return {rows:[{result:{items:[]}}]};}},config.appId,0);
+ assert.match(captured.sql,/e\.login_at>=b\.day_start/);
+ assert.match(captured.sql,/e\.login_at<b\.day_end/);
+ assert.match(captured.sql,/selected_date::timestamp AT TIME ZONE 'Asia\/Shanghai' AS day_start/);
+ assert.match(captured.sql,/\(selected_date\+1\)::timestamp AT TIME ZONE 'Asia\/Shanghai' AS day_end/);
 });

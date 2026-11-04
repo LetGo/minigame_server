@@ -12,6 +12,10 @@
 - 服务端只登记奖励已领取；真实奖励由客户端发放。服务端不维护奖励数额、金币/道具钱包，也不证明实际到账。
 - 头像昵称需客户端获得玩家授权后上传。未授权时可为空，不阻塞归因；后续上传后列表展示当前资料。
 
+## 已退役：好友昨日视频奖励
+
+2026-11-05 两环境均已关闭：`POST /invites/video-rewards/claim` 返回 404；`/invites/list` 不再含顶层 `serverDate`、`videoRewardDate` 或条目 `yesterdayVideoReward`。不得恢复该功能，旧接入契约已清理；两环境关闭结果与证据见[退役记录](feature-retirements.md)。下文普通拉新 report/list/claim、每日最多新领 50 份、未领取优先均保留。存档和玩家自身视频完成统计不受影响，统计接口不等于视频钻石领奖。
+
 ## 2. 通用约定
 
 接口前缀：`https://sub2api.wdaveh5game.com/h5login/api`。
@@ -29,9 +33,9 @@ UID 为 UUID 字符串；所有当前操作者身份由 Bearer 解析，不允�
 
 ## 3. 登录扩展与新用户资格
 
-`POST /auth/wechat-login` 请求仍是 `{"code":"新鲜wx.login code"}`，不接收 inviterUid 或客户端声明的新老用户状态。
+`POST /auth/wechat-login` 必填 `code`，可选 `clientVersion`、`scene`；旧 `{"code":"新鲜wx.login code"}` 继续兼容。完整字段见 [wechat-login-api.md](wechat-login-api.md)，不接收 inviterUid 或客户端声明的新老用户状态。
 
-成功响应新增顶层 `isNewUser`，其他字段兼容保留：
+登录返回顶层 `isNewUser`；以下仅摘录邀请相关字段，完整 user 还含可空 nickname/avatarUrl，见登录契约：
 
 ```json
 {
@@ -59,7 +63,8 @@ UID 为 UUID 字符串；所有当前操作者身份由 Bearer 解析，不允�
 {"nickname":"玩家昵称","avatarUrl":"https://example.com/avatar.png"}
 ```
 
-- 两个字段均需提供。昵称 1–64 个 Unicode 码点，不接受控制字符或畸形 UTF-16。
+- **正式与测试环境均支持（正式服于 2026-10-22 发布）**：`nickname` 仍必填；`avatarUrl` 可传 `""` 或 `null` 清空头像，统一保存和返回 `null`；省略 `avatarUrl` 则保留已有头像，首次无旧头像时为 `null`。非空头像地址继续按下面规则校验。
+- 旧客户端继续提交完整的 `nickname` 与 HTTPS `avatarUrl` 时，请求与响应结构不变。昵称 1–64 个 Unicode 码点，不接受全空白、控制字符或畸形 UTF-16。
 - avatarUrl 为长度不超过 2048 的 HTTPS URL，不允许 URL 内嵌用户名密码；服务端只保存地址，不抓取、代理或下载图片，避免 SSRF。
 - 资料是展示信息，不作为身份、邀请归属或奖励资格证明。
 
@@ -70,6 +75,47 @@ UID 为 UUID 字符串；所有当前操作者身份由 Bearer 解析，不允�
 ```
 
 获取真实微信头像昵称需符合小游戏隐私声明与授权要求；玩家拒绝授权时可跳过此接口，列表返回 null，客户端自行展示默认值。昵称头像的展示和内容安全由产品结合平台规范处理，不能声称客户端上传的资料已由微信认证。
+
+### 资料展示安全与空头像示例
+
+- 服务端只保存头像地址，不代上传图片、不抓取或代理图片；请先取得可访问的 HTTPS 图片地址，不能直接传本地临时文件路径。
+- 这是展示资料，不代表微信认证资料；获取和展示须符合小游戏隐私、授权及内容安全规则。
+- **昵称是原始、未做 HTML 转义的不可信文本。** 请使用普通文本组件（如 `textContent` / 非富文本 Label）展示；若必须进入 HTML/富文本上下文，先按该上下文安全转义，禁止直接拼入 `innerHTML`。
+- **头像地址也是玩家提供的不可信外链。** HTTPS 不代表可信；客户端宜限制允许的图片域名和资源类型，加载失败时使用默认头像。直接加载第三方图片可能向该站点暴露玩家 IP 等网络信息，请结合隐私策略处理。
+
+### 空头像请求示例
+
+下面三种请求都允许，区别是“显式清空”与“保留旧值”：
+
+```json
+{"nickname":"只有昵称","avatarUrl":""}
+```
+
+```json
+{"nickname":"只有昵称","avatarUrl":null}
+```
+
+```json
+{"nickname":"只更新昵称"}
+```
+
+前两种保存后 `user.avatarUrl` 均为 `null`，不会返回空字符串；第三种保留旧头像，原本没有头像则为 `null`。
+
+### 成功响应：HTTP 200
+
+```json
+{
+  "user": {
+    "id": "<当前玩家UUID>",
+    "nickname": "玩家昵称",
+    "avatarUrl": "https://example.com/avatar.png"
+  }
+}
+```
+
+此接口响应不包含 `openid`；客户端可直接更新当前显示和本地资料缓存。已有登录响应不会自动改变，下一次成功登录会返回新资料。
+
+资料恢复联调：未上传登录返回双 null → 用同一 token 上传资料 → 取得新 code 重登核对同 UID/已保存资料 → 更新后再次重登核对。须先完成首次会话邀请归因，再进行重登验证；不能让资料验收耗掉首次资格。
 
 ## 5. 登录后报告邀请来源
 

@@ -1,0 +1,35 @@
+[Unit]
+Description=Minigame completed-day retention aggregate snapshot
+Requires=minigame-infrastructure.service
+After=minigame-infrastructure.service network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/.hermes/workspace/projects/minigame_server
+EnvironmentFile=/home/ubuntu/.hermes/workspace/projects/minigame_server/.env.dashboard
+ExecStart=/usr/bin/node /home/ubuntu/.hermes/workspace/projects/minigame_server/runtime/dashboard/current/scripts/build-retention-report.mjs --output-dir /home/ubuntu/.hermes/workspace/projects/minigame_server/runtime/analytics/retention
+TimeoutStartSec=180
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/.hermes/workspace/projects/minigame_server/runtime/analytics/retention
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+UMask=0077
+MemoryMax=256M
+CPUQuota=50%
+StandardOutput=journal
+StandardError=journal
+
+# Provision the shared directory as ubuntu:ubuntu 0700 before installation.
+# Release artifacts must include scripts/, dashboard/retention-report.mjs,
+# ops/staging-admin.mjs and node_modules/pg. Never store snapshots inside current/.
+# The module holds a nonblocking kernel flock through publication; no stale PID lock.
+# On first run or after missed timers, all 120 cohorts are rebuilt for DB-yesterday.
+# It does not fabricate earlier daily snapshots or generatedAt timestamps.

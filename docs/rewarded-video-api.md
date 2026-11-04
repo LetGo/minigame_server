@@ -1,12 +1,12 @@
 # 激励视频完成上报与统计
 
-> 2026-10-18 北京时间 09:03 已获用户明确授权发布正式服，功能版本 `62b584c`；迁移 006、最小权限及游戏 API / dashboard 切换已完成并验收。常驻测试环境尚未发布此功能。
+> 2026-10-18 北京时间 09:03 已获用户明确授权发布正式服，功能版本 `62b584c`；迁移 006、最小权限及游戏 API / dashboard 切换已完成并验收。常驻测试随后已于 2026-10-19 随排行榜发布包含此 API（迁移 006 与最小授权先行），目前两环境均可用；见 [leaderboards-operations.md](leaderboards-operations.md)。
 
 ## 接口
 
 `POST /h5login/api/analytics/rewarded-video/completed`
 
-HTTPS + `Authorization: Bearer <accessToken>` + `Content-Type: application/json`，与现有登录/存档一致，无自定义加密。正式域名为 `https://sub2api.wdaveh5game.com`；测试环境未来发布后对应 `/h5login-test/api/analytics/rewarded-video/completed`，当前该测试路由仍为 404。不支持 URL 参数。
+HTTPS + `Authorization: Bearer <accessToken>` + `Content-Type: application/json`，与现有登录/存档一致，无自定义加密。正式域名为 `https://sub2api.wdaveh5game.com`；测试地址为 `/h5login-test/api/analytics/rewarded-video/completed`，已可用，须用测试 token。不支持 URL 参数。
 
 请求示例（仅结构示例，非真实玩家事件）：
 
@@ -76,7 +76,7 @@ HTTP 200，直接 JSON，`Cache-Control: no-store`。结构示例：
 
 Dashboard 概览显示 **今日激励视频次数**（`metrics.todayRewardedVideos`）：按服务端 `recorded_at` 统计本游戏北京时间当日 `[00:00, 次日00:00)` 已落库的去重完成事件，覆盖全部点位/玩家，不是独立观看人数或历史累计数。0 条显示 0，字段未知显示“—”。沿用网页可见时每 30 秒请求刷新，以及近 14 天日期倒序。跨日自动按新一天查询，不清空历史事件、不改上报接口，也不需要定时重置任务。
 
-该值从客户端接入并开始成功上报后才积累，不补造历史观看。鉴权只能防冒报其他玩家，不能证明本人的视频确实完整播放；**不是广告平台确认的有效展示、结算量或收入**。服务端不验证广告平台签名/回调，不发奖励。当前不新增视频明细列表、按点位排行或数据导出页面；明细已存数据库供后续分析。
+该值从客户端接入并开始成功上报后才积累，不补造历史观看。鉴权只能防冒报其他玩家，不能证明本人的视频确实完整播放；**不是广告平台确认的有效展示、结算量或收入**。服务端不验证广告平台签名/回调，不发奖励。目前不提供逐条视频流水或数据导出页面；看板已提供玩家点位聚合与每日玩家视频次数前 20，见 [dashboard.md](dashboard.md)。明细仍保存在数据库。本接口仅统计，不发放玩家自身视频钻石，也不恢复已退役的好友昨日视频奖励。
 
 删除玩家会级联删除其事件，若事件属于当天，今日次数相应变化；当前未做自动事件清理。任何将来的保留期限/清理策略应与统计口径一并明确。
 

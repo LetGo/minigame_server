@@ -1,164 +1,38 @@
 # minigame_server
 
-微信小游戏登录服务。NestJS + PostgreSQL + Redis；Node.js 24+，原生 ESM。
+微信小游戏服务端：NestJS + PostgreSQL + Redis，Node.js 24+、原生 ESM。当前是单游戏服务，不提供客户端任意切换 gameId。
 
-当前代码提供微信登录、JSON 存档保存/获取及用户资料/邀请拉新接口，不含支付、刷新令牌、注销；头像昵称由客户端获得授权后上传。**微信登录、存档、`user.openid`、`isNewUser`、资料、邀请及首次来源 scene 已部署正式环境与独立测试环境。** 存档协议与可选小游戏 SDK 见 [`docs/save-api.md`](docs/save-api.md)；邀请接入见 [`docs/invite-api.md`](docs/invite-api.md)，客户端可自行调用 HTTPS JSON，无需新增 SDK。
+## 文档入口
 
-新增独立登录的只读运营后台：今日登录活跃、新注册、实时次留、openid 玩家/原始存档查询。统计口径、安全及运维见 [`docs/dashboard.md`](docs/dashboard.md)。
+**先看 [接口与环境总索引](docs/README.md)**：完整端点表、正式/测试差异、认证、字段契约和发布记录。
 
-正式服已于 2026-10-18 发布激励视频完整观看上报（点位、会话玩家 UID、服务端记录时间、客户端 JSON 信息），接口功能版本 `62b584c`。Dashboard 按用户更正显示北京时间的**今日激励视频次数**，不展示历史累计，历史明细仍保留。接入与幂等规则见 [`docs/rewarded-video-api.md`](docs/rewarded-video-api.md)。**常驻测试环境尚未发布此功能。**
-登录服务已部署至下述 HTTPS 地址。客户端接入文档见 [`docs/wechat-login-api.md`](docs/wechat-login-api.md)，部署与运维见 [`docs/production-operations.md`](docs/production-operations.md)。真实玩家成功登录仍需小游戏新鲜 code 联调。
+- 客户端：[微信登录](docs/wechat-login-api.md) · [测试联调](docs/staging-integration.md) · [存档](docs/save-api.md) · [普通邀请与资料](docs/invite-api.md) · [排行榜](docs/leaderboards-api.md) · [玩家视频完成统计](docs/rewarded-video-api.md) · [订阅提醒](docs/subscribe-message-api.md)
+- 后台：[看板](docs/dashboard.md) · [留存日报](docs/retention-dashboard.md) · [存档恢复/补偿](docs/dashboard-save-repair.md)
+- 运维：[正式环境](docs/production-operations.md) · [常驻测试环境](docs/staging-operations.md)
 
-## 常驻测试环境
+好友昨日视频奖励已在两环境退役（领取 404、邀请列表无该奖励字段）；普通邀请、存档、玩家自身视频完成统计保留。玩家自身视频钻石奖励未开发、未上线，不属于现有统计接口。
 
-测试 API 前缀：`https://sub2api.wdaveh5game.com/h5login-test/api`。前端先看 [`docs/staging-integration.md`](docs/staging-integration.md)，运维见 [`docs/staging-operations.md`](docs/staging-operations.md)。测试与正式的用户、会话、存档和邀请数据独立，客户端缓存也必须分开。
+## 安全开发命令
 
-## 接口契约
+本机正式服务直接运行 `dist/main.js`。**未经发布授权，不运行 `npm run build`、`npm run check` 或 `npm run test:integration`（其 pretest 会重建在线 dist）**，不覆盖已部署 node_modules、配置或运行快照。
 
-部署后的地址：
-
-```text
-POST https://sub2api.wdaveh5game.com/h5login/api/auth/wechat-login
-Content-Type: application/json
-
-{"code":"小游戏端 wx.login() 刚获取的一次性 code"}
-```
-
-不接受客户端指定 `openid`、`userId`、`appid` 或其他额外字段。`code` 为 1–512 字符的无空白字符串。
-登录请求正文不超过 16 KiB，不接受压缩请求正文。
-
-成功：HTTP 200，`Cache-Control: no-store`。以下为**结构示例，不是真实登录结果**：
-
-```json
-{
-  "accessToken": "<服务端生成的随机令牌>",
-  "tokenType": "Bearer",
-  "expiresIn": 604800,
-  "isNewUser": true,
-  "user": {"id": "<用户 UUID>", "openid": "<当前小游戏的微信 openid>"}
-}
-```
-
-- 默认有效期 7 天，可配置；到期或 Redis 会话丢失时，客户端重新 `wx.login()`。
-- 多次登录允许多个令牌共存，用户 ID 不变；不是单设备登录/踢下线方案。
-- 存档接口读取 `Authorization: Bearer <accessToken>`，通过令牌摘要查询 Redis 并校验用户/应用归属；HTTPS 下直接收发 JSON，无自定义加密。见存档接入文档，现已发布到生产。
-- `user.openid` 用于客户端展示及平台反馈定位，不代替 Bearer token；新增字段线上生效以部署通知为准。
-- `isNewUser` 来自服务器首次注册判定，仅首次注册会话有未绑定的新用户拉新资格；再次登录不重新授予。分享 query 直接使用 `inviterUid=<user.id>`，无需单独邀请码或获取分享参数接口。
-- 不返回、记录或持久化微信 `session_key`；不返回 AppSecret。
-- 微信校验成功后，PG 以 `(app_id, open_id)` 唯一键原子 upsert 用户，Redis 仅保存随机令牌的 SHA-256 摘要键及会话元信息。
-- PG/Redis 任一失败均不返回令牌。首次注册登录通过 PG 事务与 Redis 会话确认协调，Redis 写入失败会回滚用户/首登标记，避免消耗新用户资格。
-- 不自动重试微信换码请求，避免重复消费一次性 code。
-
-错误返回有 `statusCode`、`message`，其中参数校验的 `message` 是字符串数组：
-
-| HTTP | message / 含义 |
-| --- | --- |
-| 400 | 参数校验错误，或 `INVALID_JSON` |
-| 401 | `WECHAT_CODE_INVALID`：code 无效、过期或已使用，重新获取 code |
-| 403 | `WECHAT_LOGIN_BLOCKED`：微信拦截，不要立即循环重试 |
-| 413 | `REQUEST_TOO_LARGE` |
-| 415 | `UNSUPPORTED_ENCODING` / `UNSUPPORTED_CHARSET` |
-| 429 | `LOGIN_RATE_LIMITED`，遵循 `Retry-After` 秒数 |
-| 502 | `WECHAT_UNAVAILABLE` / `WECHAT_INVALID_RESPONSE` / `WECHAT_LOGIN_FAILED` |
-| 503 | `WECHAT_BUSY` 或 `LOGIN_STORAGE_UNAVAILABLE`，退避后用新的 code 重试 |
-
-微信请求超时 5 秒；PG 连接 3 秒、语句 5 秒；Redis 请求 3 秒。
-登录默认按真实来源 IP 限制每 60 秒 120 次（同一 NAT 出口共用额度），Redis Lua 原子计数。
-默认不信任客户端转发头。只有 loopback 监听时才允许启用 `TRUST_LOCAL_PROXY=true`。
-登录接口不需要前端传 AppSecret，不需要授权昵称头像。
-
-## 小游戏端示例
-
-```js
-wx.login({
-  success({ code }) {
-    if (!code) return;
-    wx.request({
-      url: 'https://sub2api.wdaveh5game.com/h5login/api/auth/wechat-login',
-      method: 'POST',
-      header: { 'content-type': 'application/json' },
-      data: { code },
-      timeout: 20000,
-      success(res) {
-        if (res.statusCode === 200) {
-          wx.setStorageSync('game_access_token', res.data.accessToken);
-          wx.setStorageSync('game_user_id', res.data.user.id);
-          wx.setStorageSync('game_openid', res.data.user.openid);
-          // 令牌是敏感凭据，禁止打印日志或加入 URL。
-        } else {
-          // 按上表处理；重新登录前获取新的 code，避免无限重试。
-        }
-      },
-      fail() {
-        // 网络错误：退避后重新获取 code 再试。
-      }
-    });
-  }
-});
-```
-
-需在微信小游戏后台配置 request 合法域名 `https://sub2api.wdaveh5game.com`（不带路径），并满足微信对证书、备案等的要求；仓库开发不代表已核实后台配置。
-
-## 本机开发与配置
+已有开发依赖时，可在仓库执行下列源码检查；构建输出仅放隔离候选目录：
 
 ```bash
-npm ci
-cp .env.example .env  # 仅首次配置；已有 .env 时不要覆盖
-chmod 600 .env
-# 安全编辑 .env，填写微信配置及独立 PG/Redis 连接地址
-npm run migrate
-npm run dev
+npm run typecheck
+npm test
+npm run test:dashboard
+npx tsc -p tsconfig.build.json --outDir tmp/docs-example-candidate-dist
 ```
 
-`.env` 已被 Git 忽略；绝不提交真实 AppSecret、令牌、数据库连接凭据。
-本机实际微信凭据及运行账号连接保存在权限 0600 的 `.env`；独立生产数据库/Redis 已部署。管理员/基础设施凭据在 Git 忽略、权限 0600 的 `.env.production.infrastructure`，禁止回显或提交。
-AppSecret 已在聊天中提供过，生产使用前建议在微信后台重置，再安全更新 `.env`。
-
-生产数据库应使用独立用户/数据库；不要接入或复用 sub2api 的业务数据。
-
-## 新用户来源场景（正式服及测试服已部署）
-
-新增 `POST /users/source-scene`，首次注册会话上报 `{ "scene": 1007 }`，保存到 `game_users.source_scene` 和服务端上报时间；同值重试幂等，不同值拒绝覆盖，数据库触发器保证写入后不可修改。历史用户不补录。独立于邀请归因。
-
-接口/前端规则见 [source-scene-api.md](docs/source-scene-api.md)。2026-10-17 已在常驻测试服及正式服执行迁移 `004_source_scene.sql` 并发布该接口；正式发布包含邀请、未领取优先、每日50份上限及登录新增字段，记录见 [production-operations.md](docs/production-operations.md)。
-
-迁移显式执行，不在 API 启动时自动建表。迁移在事务和 advisory lock 内执行，并校验已执行文件的 SHA-256，后续通过新增 SQL 文件演进，勿修改已执行迁移。
-建议迁移账号与运行账号分离。现有生产权限为 `game_users`、`game_saves`、`game_profiles`、`game_invitations` 的 SELECT/INSERT/UPDATE，迁移001–004已执行，不授予运行账号 DELETE/DDL。
-
-## 自动测试
+需要集成测试时，须先确认目标仅为专用临时测试环境；它会写入并清理测试业务数据，**不属于只读文档校验**：
 
 ```bash
-npm run check
-# 隔离 PG/Redis：仅绑定本机高位端口，PG 为 tmpfs，绝不能用于生产
 sudo docker compose -p minigame-login-test -f compose.test.yaml up -d --wait
-npm run test:integration
+MINIGAME_TEST_DIST_DIR=tmp/docs-example-candidate-dist node --import tsx --test --test-concurrency=1 test/*.integration.ts test/*.integration.mjs
 sudo docker compose -p minigame-login-test -f compose.test.yaml down
-npm audit
 ```
 
-集成测试固定使用 `127.0.0.1:15439/minigame_test` 和 `127.0.0.1:16389/15`，**不会读取真实 `.env`**。
-已部署主机的 systemd 直接运行 `dist/main.js`。上述 `check` / `test:integration` 会重建 dist，不能在未授权发布时直接运行。请改用隔离构建：
+仅允许固定测试 PostgreSQL `127.0.0.1:15439/minigame_test`、Redis `127.0.0.1:16389/15`；不能改指向常驻测试或正式库。新开发副本安装依赖用 `npm ci`，不要在运行快照/在线依赖目录原地安装。
 
-```bash
-npm run typecheck && npm test && npm run build:client
-npx tsc -p tsconfig.build.json --outDir tmp/json-api-candidate-dist
-# 先按上方命令启动专用测试 Compose
-MINIGAME_TEST_DIST_DIR=tmp/json-api-candidate-dist node --import tsx --test --test-concurrency=1 test/*.integration.ts
-```
-
-会清空测试用户表和测试 Redis DB 15，不能将它们改指向生产。
-成功登录场景使用真实 PG/Redis、明确的微信网络测试替身；不等同于微信真实玩家成功登录。
-覆盖用户并发去重、令牌摘要及 TTL、参数和正文限制、限流与伪造 IP、依赖故障、编译入口端口冲突后的退出清理。
-微信客户端单元测试覆盖官方地址/参数、一次调用不重试、错误码映射与异常脱敏。
-
-## 部署步骤参考（本机已完成）
-
-1. 配置独立的持久化 PostgreSQL 和 Redis，设置凭据、私网/loopback 访问以及备份策略。测试 compose 没有持久化，不可转为生产。
-2. 更新 `.env`，保持 `HOST=127.0.0.1`、`PORT=18740`，按需启用 `TRUST_LOCAL_PROXY=true`。
-3. 执行 `npm ci`、`npm run check`，以数据库管理员连接显式运行迁移，再用 systemd 启动应用。生产 `.env` 使用最小权限运行账号，不可直接以该账号运行 `npm run migrate`。
-4. 经授权后，备份现有 Nginx 配置，将 `ops/nginx-h5login.conf.example` 加入现有 HTTPS server 块，`nginx -t` 成功后 reload。
-5. `proxy_pass` **不带结尾斜杠**，保留 `/h5login` 前缀；不要覆盖 `/request-logs`、`/tqwz-query/` 和 sub2api 根路由。
-6. 新路径必须禁用正文 mirror、缓存及任何请求正文/令牌日志。Nginx 覆盖 `X-Forwarded-For`，不要透传客户端伪造的来源。
-7. 使用新鲜无效 code 核实公网错误路径，再用真实小游戏 `wx.login()` code 完成成功登录验收；核实 PG 用户和 Redis 会话，不把令牌写入审计日志。
-
-官方协议参考：https://developers.weixin.qq.com/minigame/dev/api-backend/login/api_code2session.html
+真实 `.env*`、AppSecret、数据库连接、token、原始存档和私有审查证据不可回显或提交。迁移、备份恢复、发布、服务重启及 Nginx 变更需单独授权；不以文档命令视为授权。自动化换码替身/合成会话不是真实微信登录或广告回调验收。

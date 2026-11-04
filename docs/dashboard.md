@@ -1,6 +1,8 @@
-# 小游戏只读运营后台
+# 小游戏运营后台
 
 入口：`https://sub2api.wdaveh5game.com/h5dashboard/`。这是独立管理员登录，不使用玩家 Bearer token，不在 URL 放密码或 token。
+
+> 当前接口总表与环境状态见 [README.md](README.md)。统计/查询只读，独立存档恢复 apply 为受控写例外。留存 D1/3/5/7/14/20/30 与每日北京时间00:10日报已上线，见 [retention-dashboard.md](retention-dashboard.md)。历史发布小节保留当时快照/验收，不是当前运行软链的承诺。
 
 ## 统计口径
 
@@ -16,6 +18,36 @@
 
 - `005_daily_logins.sql` 建立逐日登录表。上线当日用用户现有 `last_login_at` 补录当日已登录用户，**不使用最后登录时间反推更早每日活跃**。覆盖日期前的 DAU 显示“—”；次留按**次日回访日**是否达到覆盖日期判断，未覆盖或分母为 0 显示“—”，不把未知回访当成 0。注册日早于覆盖日期、但其次日在覆盖范围内的队列仍可统计次留。历史注册数仍可查询。覆盖日期由数据库记录，非前端猜测。
 - 登录与当天去重记录在同一数据库事务中提交；Redis/数据库失败不得留下成功活跃或半注册记录。按获锁后数据库时钟归日，跨日不使用排队前的事务起始时间。
+
+## 近 14 天趋势周末标记（2026-10-26 17:13 北京时间已发布）
+
+- 按接口已归属北京时间的 `history[].date` 判断周六、周日，与浏览器所在时区无关；不是按次留回访日期判断，也不将法定节假日/调休工作日另作分类。
+- 周末整行数据用绿色文字和淡绿色底色标记，日期追加“（周六）”或“（周日）”；深色模式使用较亮绿色，今天的“（截至现在）”照常保留。工作日保持原样。
+- 保持日期倒序、七列及全部数值/人均/邀请占比/次留实时与待统计语义；仅前端展示改动，不改接口、SQL、缓存或玩家数据。
+- 运行文件变更仅 `dashboard/public/app.js`、`dashboard/public/style.css`；发布快照 `runtime/dashboard/releases/20261026T091002Z-weekend-highlight`，仅重启 `minigame-dashboard`，正式/测试 API、提醒任务、数据库结构/玩家数据、Nginx、凭据和存储容器均未变。
+- 上线验证：27 项真实管理员 HTTPS＋已部署资源 jsdom 验收通过，14 行中 4 行周末、56 次浅/深色单元格检查通过；接口/统计数值与原版显示对照不变。10 秒稳定性和发布后错误类日志检查通过。不是实际浏览器验收。回滚到先前 `20261023T120828Z-login-client-version` 并只重启看板；证据 `tmp/dashboard-weekend-highlight/{published,public-verification,release-protected-verification}.json`。
+- 开发验证：77 项看板测试、48 项单元测试、类型检查通过；UTC/洛杉矶/上海三个进程时区测试通过。用正式库只读概览数据驱动候选 JS/CSS 的 jsdom 验收，14 行中 4 行周末、56 次浅色/深色单元格绿色检查通过，全部指标单元格与改动前一致；不等同实际浏览器或正式发布验收。证据：`tmp/dashboard-weekend-highlight/`。
+- 本次依赖审计报告 4 项既有 high 级包受影响项（`body-parser`、`multer` 及 Nest 依赖链）；`package.json`/锁文件未改，未擅自升级或降级依赖，应另行评估处理，不将本次审计写为 0 漏洞。
+
+## 昨日同一时刻对比（2026-10-27 11:57 北京时间已发布）
+
+- 「今日活跃用户、今日新注册、今日邀请新注册、今日激励视频次数」四张卡片，在当前数字右侧以较小灰字显示 `昨日同期：数字`；累计用户与实时次留不增加对比。零值显示 `0`，不可用显示 `—`，不使用历史趋势的昨日全天数代替。
+- 接口新增 `yesterdaySameTime: {date, cutoffAt, dau, newUsers, invitedNewUsers, todayRewardedVideos}`。昨日窗口为北京时间 `[昨日00:00, 昨日同一时刻]`，包含截止时刻；与现有 `generatedAt` 共用单个数据库时钟，缓存命中时今日数字、昨日截止时刻和“更新于”一同保持不变。不是以浏览器当前时间重新计算截止时刻。
+- 活跃人数按昨日 `activity_date` 和 `first_login_at <= cutoffAt` 去重；不从可变的最后登录时间反推。采集前及采集首日（有最后登录补录，无法还原真实首次登录）显示 `null` / `—`，之后无记录可显示 `0`。
+- 新注册按昨日注册队列、首次登录完成状态及注册时间截止过滤。邀请新注册同样按注册队列归属，且要求 `invited_at <= cutoffAt`，不将截止后补绑的邀请算进昨天当时的数据；已领、未领均计入。现有今日/趋势的延迟绑定回填口径不变。
+- 视频按服务端 `recorded_at` 的昨日窗口计已入库去重事件，不读取存档，不代表广告平台核验量。
+- 未新增迁移、权限或玩家数据写入，未修改游戏 API/缓存机制。用户明确授权后已于 **2026-10-27 11:57:13（北京时间）** 发布，仅重启 `minigame-dashboard`，游戏 API、持久测试服、提醒 worker/定时器、数据库结构、存储容器、Nginx 与凭据保持不变。
+- 正式快照 `runtime/dashboard/releases/20261027T035202Z-yesterday-same-time`，从周末标绿版本克隆，运行文件仅变更 `dashboard/queries.mjs`、`dashboard/public/app.js`、`dashboard/public/style.css`。80 项看板、32 项看板集成、48 项单元及类型检查通过；源码与运维独立审查按精确哈希通过，发布门禁及自动回滚离线演练通过。
+- 候选真实 loopback HTTP 50 项、正式管理员 HTTPS 51 项验收通过；包含正式库只读独立 SQL 核对、已部署资源 jsdom 完整启动/登录日志/视频排行/返回概览、真实 30 秒缓存失效后 API 截止时间及页面“更新于”一同前进。jsdom 不等同真实浏览器或微信真机；未写入/伪造玩家数据。发布后 10 秒身份稳定，错误类日志 0，正式/测试登录接口的缺 code 输入校验仍返回 400。
+- 证据与回滚入口 `tmp/dashboard-yesterday-same-time/{published.json,public-verification.json,release-protected-verification.json,release.json,deploy.py}`；旧快照 `20261026T091002Z-weekend-highlight` 保留。回滚只恢复旧看板软链并重启看板，不回滚数据库。既有 4 项 high 依赖告警与上次审计一致，本次未改依赖。
+
+## 昨日同期数字颜色（2026-10-27 12:34 北京时间已发布）
+
+- 四张今日计数卡片的今日主数字，高于昨日同期为绿色（`--color-success`），低于为红色（`--color-error`）；相等或任一侧数据缺失时保持默认原色，零值正常参与比较。
+- 右侧「昨日同期」保持灰字，累计用户、实时次留、趋势表不受影响。仅改前端 JS/CSS，不改统计接口、SQL、缓存或数据库。用户明确授权后于 **2026-10-27 12:34:36（北京时间）** 发布，快照 `runtime/dashboard/releases/20261027T042149Z-comparison-colors`，完整 release 与旧版的差异仅 `dashboard/public/app.js`、`dashboard/public/style.css`，仅重启看板。
+- 82 项看板、48 项单元、32 项看板集成、类型检查及三时区各 5 项 UI 测试通过；候选真实 loopback HTTP/jsdom 64 项、正式管理员 HTTPS＋已部署资源 jsdom 65 项验收通过，包含真实 30 秒缓存过期后截止时间、页面“更新于”和数字颜色同步刷新。额外模拟 7 次数据刷新 98 项断言，覆盖绿→红→持平/缺失原色及零值；非真实浏览器/微信真机验收。
+- 初次运维审查因完整候选未独立绑定、Python 优化模式可移除 assert 阻断，**未切换线上**；独立修复后 11 项负向测试与自动回滚演练通过，再经独立复审 PASS。最终门禁绑定四脚本哈希、两源文件与 old/new 完整 release manifest（各 9460 文件，含 node_modules）；拒绝 `-O`/`-OO`/`PYTHONOPTIMIZE` 优化运行。发布后全量 manifest 与保护运行状态回读一致，正式/测试 API、提醒 worker、环境/Nginx、数据库结构、容器及玩家数据未改，稳定 10 秒，错误类日志 0。
+- 证据与回滚：`tmp/dashboard-comparison-colors/{published.json,public-verification.json,release-protected-verification.json,ops-review.json,release-manifests.json,deploy.py}`；保留旧快照 `20261027T035202Z-yesterday-same-time`，回滚仅恢复旧看板并重启看板。既有 4 项 high 依赖告警未增加、未改依赖；红绿对比度和辅助说明为非阻断后续建议，本次未扩大改动。
 
 ## 概览性能与缓存
 
@@ -42,17 +74,59 @@
 
 ## 登录日志（只读）
 
-- 左侧“登录日志”页提供**查询日期（北京时间）**选择器，进入时默认当天，切换日期自动回到第一页并查询该日的现有成功登录记录；可查询其他日期，不受近 14 天趋势窗口限制。列为登录时间（北京时间）、openid、昵称、首次来源场景、注册时间（北京时间）；按登录时间倒序，同时间按用户 ID 排序。
+### 逐次登录场景（正式已部署）
+
+2026-10-31 02:43:31（北京时间）正式恢复发布成功，迁移013、API INSERT与看板SELECT已就绪；详见 [正式发布记录](login-events.md)。当前展示每次成功登录事件，并增加「本次登录场景」列（`items[].loginScene`），与不可变的「首次来源场景」分开。省略或历史未采集的本次场景显示 `—`，不以首次来源补填。旧逐日首次登录记录仍保留展示，与相同时间的新事件去重；采集前重复登录无法还原。DAU/次留仍读取原逐日去重表，不改统计口径。其他环境发布前仍须独立确认迁移 `013_login_events.sql`、API 新表 INSERT 和看板 SELECT 就绪，不把正式状态外推测试。
+
+- 左侧“登录日志”页提供**查询日期（北京时间）**选择器，进入时默认当天，切换日期自动回到第一页并查询该日的现有成功登录记录；可查询其他日期，不受近 14 天趋势窗口限制。列为登录时间（北京时间）、openid、昵称、客户端版本、本次登录场景、首次来源场景、注册时间（北京时间）；按登录时间倒序，事件同时间使用稳定事件 ID 排序。
+- 已于 2026-10-23 20:15（北京时间）发布：客户端版本读取 `game_users.last_client_version`，接口字段 `clientVersion`；显示玩家最近一次成功登录上报的版本，**并非所选历史登录当天的版本快照**。未上报显示“—”；旧客户端省略上报时仍保留之前的版本值。此次仅改看板，不更改登录采集或数据库结构。
+- 已于 2026-11-01 00:45（北京时间）发布展示调整：登录日志「本次登录场景」「首次来源场景」单元格仅显示原始场景 ID，悬停 `title` 显示完整 `ID · 场景描述`。本次场景未上报仍显示 `—`，首次来源未上报仍显示“未上报”；未知 ID 原样展示，提示“官方当前文档未收录”。数据库原值、统计口径和玩家查询页完整描述不变。替代原有30字符截断规则。
 - 注册时间读取 `game_users.created_at`，按北京时间显示，与当天登录时间独立；不以登录时间推算注册时间。
-- 首次来源场景读取 `game_users.source_scene`，与玩家查询页共用官方映射，显示 `原始 value · 场景描述`（如 `1030 · 自动化测试下打开小程序`）；未上报显示“未上报”，未收录的值仍保留原始值。它是用户首次上报的来源，不代表本次登录的进入场景，不新增逐次场景采集。
-- 数据来自 `game_daily_logins.first_login_at`：该表本身仅保留每个用户每天首次成功登录的一条记录。页面和接口不再额外去重，但**不是每次登录的流水**，不能还原重复登录次数、逐次时间或 IP。昵称展示当前资料；未设置显示“—”。
+- 首次来源场景读取 `game_users.source_scene`；本次登录场景来自事件 `scene`。两列单元格显示原始 ID，title 使用与玩家查询相同的完整官方描述；首次未上报显示“未上报”，本次缺失为“—”，未知值保留。首次来源不可作为本次场景的替代。
+- 新数据来自 `game_login_events` 的逐次成功登录；同时兼容 `game_daily_logins.first_login_at` 历史每日首登，同用户/应用/完全相同时间对应的事件只展示一次。不能还原采集前重复登录、本次 scene 或 IP。昵称展示当前资料，未设置显示“—”。
 - 每页 50 条，支持上一页、下一页和手动刷新（回到首页）；翻页和刷新均保留所选日期，不使用概览缓存。总数和当前页在同一 SQL 查询快照中生成，按应用 ID 隔离；翻页期间新登录可能推动页边界。日期固定为选择的北京时间自然日，跨零点不悄悄切到其他日期；重新进入页面默认新的当天。快速切换日期时丢弃旧请求的迟到结果；清空日期提示选择，不自动退回当天。无记录显示“所选日期暂无成功登录记录”，不会用最新登录时间推算或补造历史。
-- `POST /h5dashboard/api/login-logs` 接受 `{ "offset": 0, "date": "2026-10-20" }`：`offset` 缺省为 0，只允许整数 0–10,000,000；`date` 可省略，省略时由数据库按同一时间快照取北京时间当天。日期必须为 `0001`–`9999` 年的真实 `YYYY-MM-DD` 日期，空值、null、非字符串、非法月日或时间戳均返回 400。固定页大小 50。返回 `date`（实际查询日期）、`today`（查询时北京时间当天，不随历史筛选改变）、`timezone`、`generatedAt`、`total`、`offset`、`limit`、`hasMore`、`items[{loginAt,openid,nickname,sourceScene,registeredAt}]`。历史查询仅返回已留存的逐日记录，不代表采集上线前有完整历史。
-- 沿用后台会话、Origin 和 JSON 校验；未登录不可查，所有昵称/openid 仅以纯文本显示，不存浏览器持久存储。无数据库迁移、无玩家数据写入、无游戏登录接口修改。
+- `POST /h5dashboard/api/login-logs` 接受 `{ "offset": 0, "date": "2026-10-20" }`：`offset` 缺省为 0，只允许整数 0–10,000,000；`date` 可省略，省略时由数据库按同一时间快照取北京时间当天。日期必须为 `0001`–`9999` 年的真实 `YYYY-MM-DD` 日期，空值、null、非字符串、非法月日或时间戳均返回 400。固定页大小 50。返回 `date`（实际查询日期）、`today`（查询时北京时间当天，不随历史筛选改变）、`timezone`、`generatedAt`、`total`、`offset`、`limit`、`hasMore`、`items[{loginAt,openid,nickname,clientVersion,loginScene,sourceScene,registeredAt}]`。目标库须有迁移011版本列和013事件表及只读查询权限。正式均已就绪；历史查询仅返回实际留存的逐次事件和兼容逐日记录，不代表采集上线前有完整流水。
+- 沿用后台会话、Origin和JSON校验；未登录不可查，所有昵称/openid仅以纯文本显示，不存浏览器持久存储。查询本身不写玩家；逐次采集上线需要013及API事务写入，不能沿用旧版“无迁移、无采集修改”的阶段描述。
+
+### 登录日志版本列与场景长度发布（2026-10-23 20:15，北京时间）
+
+用户确认发布，正式快照 `runtime/dashboard/releases/20261023T120828Z-login-client-version`；基于上个快照仅替换 `dashboard/queries.mjs`、`dashboard/public/app.js`，仅重启看板。75 项看板、48 项单元、25 项看板数据库集成及类型检查通过、审计 0 漏洞，独立功能与最终运维审查通过。真实 HTTPS 管理会话＋已部署脚本 jsdom 的 44 项验收通过，逐行核对正式库只读 SQL、版本/null、30 字显示/全文 title、日期/分页/刷新/退出及既有总览和排行；不是实际浏览器测试。无迁移、权限变更或玩家写入，游戏 API、测试服、提醒任务、Nginx、凭据和存储容器保持不变，发布后错误类日志 0。
+
+首轮因验收脚本在严格模式下二次 eval 无法访问 `formatScene` 而自动回滚；在临时本地候选只读预览复现，并修复为同次 eval 捕获函数，专项回归通过、重新独立审查后重发成功。产品候选未改。证据、上个快照和回滚入口：`tmp/dashboard-login-version/{release-verification-summary.json,attempt-1/,deploy.py}`。回滚仅恢复上个看板快照并重启看板，无需修改数据库或游戏 API。
+
+## 昨日用户分析（正式已发布）
+
+- 左侧新增「昨日用户分析」Tab，展示三张按首次来源 `game_users.source_scene` 划分的饼图：昨日注册人数、昨日新注册用户在昨日产生的激励视频次数、昨日新注册用户今日已成功登录的去重人数（实时）。
+- 昨日注册队列为本 AppID、首次登录已完成、北京时间 `[昨日00:00, 今日00:00)` 的注册用户。三图使用同一数据库时钟和查询快照；视频同样只计昨日自然日已入库完成事件，**不是这些用户的累计或今日视频次数**，不读取存档计数。今日登录读取逐日表，不从可变的最后登录时间反推。
+- 图例显示原始 scene＋既有微信官方描述、数量、占本图总量百分比（两位小数）；未上报独立分组，未知 scene 保留原值。同一刷新内同一 scene 在三图使用相同颜色。视频图的分母是次数，其余两图是人数，不混用。
+- 进入自动加载，可手动刷新；可见页面每 30 秒刷新，隐藏暂停，恢复可见时立即刷新，跨北京时间零点由服务端自动换队列。没有额外统计缓存；查询中合并本页重复请求，切页/退出后迟到结果不覆盖新页面。失败清除旧图并提示重试，不伪装成 0；登录采集未覆盖时今日回访显示不可用；真实 0 展示明确空态。
+- 只读 `POST /h5dashboard/api/yesterday-analysis`，仅接受 `{}`，沿用管理员会话、Origin、JSON、no-store、固定应用和只读连接；返回 `{today,cohortDate,timezone,generatedAt,loginCoverage,registrations,rewardedVideos,returnedUsers}`，各图为 `{total,items:[{scene,value}]}`，未覆盖时回访的 total/items 为 null。单条参数化 SQL 完成聚合，不返回玩家身份或原始事件。
+- 验证：92 项看板测试、40 项看板 PostgreSQL/Redis 集成、48 项单元测试、类型检查及语法检查通过；新页面 UI 在洛杉矶/上海进程时区各 6 项通过。候选进程使用正式库只读角色，在只读一致性事务中与独立 SQL 按 scene 交叉核对，并通过 17 项本机真实 HTTP＋完整脚本 jsdom 验收（包括三图、登录/退出、30 秒刷新与隐藏暂停）。以上是历史候选验证，不是当时的正式发布或真机验收。随后于 2026-10-30 20:24（北京时间）正式发布，79项公网验收及最终回读通过，只重启看板，旧管理员会话保留、受保护目标未变；证据 `tmp/dashboard-yesterday-analysis/{published,final-readback}.json`。不声称真实浏览器/微信真机验收。
+- 使用本地 SVG，无外部图表/CDN 依赖、不放宽 CSP；响应式布局兼容现有浅/深色样式，图例使用纯文本并提供可访问标签。无迁移、授权变更、玩家数据写入或游戏 API 修改。该功能已随独立快照正式发布；未来源码变更仍须重新授权发布。
+
+## 视频排行（只读）
+
+- 左侧新增「视频排行」Tab。默认由数据库时钟确定北京时间当天，不依赖浏览器日期；按该日已入库激励视频完成事件数倒序取前 **20** 位玩家，次数相同按 UID 倒序，序号依次为 1–20。只列当日次数大于 0 且已完成首次登录的本游戏玩家，不用历史活跃玩家补足 20 人。
+- 列为排名、昵称、openid、当日激励视频次数、历史总次数。昵称取当前资料，未设置显示“—”；openid 与昵称使用纯文本渲染。历史总次数是该玩家全部现存上报事件，不受所选日期限制；不读取云存档中的观看计数。
+- 支持日期选择、刷新及「今天」按钮。进入与点击「今天」按服务器当前日查询；默认当天模式下刷新仍由服务器选日。选择历史日期后，刷新保留所选日期，不随跨零点切换；清空日期提示选择，不自动查询。排行不使用概览缓存、不自动轮询，进入页面或点击刷新重新统计；过期会话/退出和迟到请求不能恢复旧数据。
+- `POST /h5dashboard/api/video-ranking` 请求 `{}` 或 `{ "date": "2026-10-22" }`。日期须为 `0001`–`9999` 年真实 `YYYY-MM-DD`；null、非法月日、多余字段、身份/应用/limit 覆写均拒绝。固定最多 20 人，不分页。
+- 返回 `{today,date,timezone,generatedAt,limit:20,items:[{rank,userId,openid,nickname,dailyCount,totalCount}]}`；`today` 为查询时实际北京时间当天，`date` 为所选日期，二者不混用。每日采用同一数据库时钟快照对应的北京时间 `[00:00, 次日00:00)` 和服务端 `recorded_at`，按表主键去重；无当日记录返回 `items:[]` 并显示明确空态。
+- SQL 在数据库端聚合日次数、排序取前 20，再仅对这些玩家使用现有 `(app_id,user_id)` 索引前缀统计历史总数；不返回原始事件或 `client_info`。仅查询配置 AppID 的现有事件/玩家/资料表，沿用管理员会话、Origin、普通 JSON、只读角色和 no-store，不新增迁移/权限/游戏 API 改动或玩家数据写入。
+- 次数只代表客户端完整观看上报并成功入库，不等于微信广告平台核实的有效播放或收益；未接入/上报失败的观看不补造，删除玩家已级联移除的事件不再计入。
+
+### 视频排行发布记录（2026-10-22 21:25 北京时间）
+
+经用户明确确认发布，正式快照为 `runtime/dashboard/releases/20261022T131445Z-video-ranking`，上个快照保留回滚。只替换看板 `backend.js`、`queries.mjs`、`public/app.js`、`public/index.html`，只重启 `minigame-dashboard`；游戏 API、测试服、提醒任务、配置、Nginx、数据库结构及玩家数据未改。类型检查、48 项单元、74 项看板、172 项集成、2 项运维测试及依赖审计通过，独立审查无阻断。55 项真实 HTTPS/已部署 JS 的 jsdom 验收通过，今天和历史日期的排行逐行匹配正式库独立只读 SQL；并验证既有总览、玩家查询、登录日志、退出登录。不等同真实浏览器/微信客户端测试。证据和回滚入口：`tmp/dashboard-video-ranking/`。
 
 ## 玩家查询（只读）
 
-按配置游戏的完整 openid 精确匹配，以 POST JSON 发送，不放查询 URL。
+按配置游戏的完整 openid 或 UID（UUID）精确匹配。“查询玩家”提供查询方式选择，默认 openid，可切换 UID；切换方式会清空旧输入和结果，修改输入会使在途旧响应失效。仅新增只读玩家查询，不扩展“修改数据”的查找或写入入口。
+
+UID 查询已于 **2026-11-02 10:44:56（北京时间）** 经授权发布。快照 `runtime/dashboard/releases/20261102T024304Z-player-uid`，仅覆盖 `dashboard/backend.js`、`dashboard/queries.mjs`、`dashboard/public/app.js`、`dashboard/public/style.css`，仅重启看板；正式/测试 API、配置、迁移及玩家数据未改，noderun 保持停止。119 项看板测试、44 项数据库集成、类型检查、7 项发布恢复测试及独立精确哈希审查通过。公网验证 UID/openid 完整详情一致、UID 大写/非法/未知及混合输入、会话/退出、旧功能与精确资源通过；候选真实 HTTP 使用正式只读事务及测试内存会话验证跨应用隔离。证据 `tmp/player-uid-release-final/{published,final-readback,public-acceptance,candidate-http,ops-review}.json`；不代表微信真机验收。
+
+`POST /h5dashboard/api/player` 接受 `{ "openid": "完整 openid" }` 或 `{ "uid": "完整 UUID" }`，只能二选一，拒绝额外字段。UID 必须是完整带连字符的 UUID（十六进制大小写均可），不自动修补、截断或去除空白；格式错误返回 400 `INVALID_UID`，未找到或其他 AppID 的 UID 返回 404 `PLAYER_NOT_FOUND`。openid 原调用方式保持兼容。标识以 POST JSON 发送，不放查询 URL；两个入口返回相同的完整玩家详情，沿用会话认证、Origin 校验、禁缓存及当前应用隔离。
+
+UID 查询已部署；无需数据库迁移或权限调整，不修改玩家数据。
 
 返回 UID、openid、昵称、头像 URL、注册/最后登录时间、首次 scene 及上报时间、完整原始云存档及版本/更新时间、邀请人、邀请汇总、最近 100 条邀请记录（超出明确提示）及最近 30 个已记录登录日。
 
@@ -60,13 +134,21 @@
 
 存档不做 JSON 数字转换或内容截断，支持复制/下载原文。所有用户数据用 DOM `textContent` 渲染，不能执行昵称/存档中的 HTML。
 
-不提供修改存档、删除玩家、领取或发放奖励操作。
+### 玩家激励视频统计
+
+玩家查询页新增「激励视频」区域：累计次数、今日次数、首次/最近记录时间（北京时间），以及各广告点位的累计/今日次数。`POST /h5dashboard/api/player` 在原响应上新增 `rewardedVideos: { total, today, firstRecordedAt, lastRecordedAt, placements: [{ placement, total, today }] }`，原字段不变。
+
+统计直接按当前应用、精确匹配的玩家 UID 聚合 `game_rewarded_video_events`，不把完整事件明细下载至浏览器；同一玩家同一事件 ID 的重试已由数据库主键去重。累计为现存全部历史记录，今日按同一数据库时间快照确定北京时间 `[00:00, 次日00:00)`，日期依据服务端 `recorded_at`，不是客户端完成时间。无事件时次数为 0、首次/最近时间为 null、点位数组为空；未知玩家仍返回 404。玩家查询不使用概览缓存，重新查询刷新数据。
+
+存档内 `RewardAdWatchCount` 不参与统计，也不自动修正或回填。计数仅说明客户端上报并成功落库的完成事件，不代表微信广告平台核验的有效展示/收入；未接入或未成功上报的历史不补造。仅使用已有只读表权限，无迁移、无玩家写入、无游戏 API 改动；点位原值以纯文本显示。本次不新增逐条视频流水页面。
+
+本玩家查询接口不提供修改存档、删除玩家、领取或发放奖励操作。独立「修改数据」受控入口见 [dashboard-save-repair.md](dashboard-save-repair.md)，不得将其写权限混入只读查询。
 
 ## 安全及运行
 
 - 后台 `minigame-dashboard.service` 独立运行，仅监听 `127.0.0.1:18742`，由 Nginx HTTPS `/h5dashboard/` 代理。
 - `.env.dashboard` 仅 0600，存独立 `minigame_dashboard_app` 只读 DB 连接、管理员 scrypt 哈希和 Redis DB1 连接；不得提交或回显。独立管理员访问资料 `.env.dashboard.access` 也仅 0600，不做 Web 静态文件。
-- 数据库角色仅获 7 张指定业务表 SELECT，默认只读事务；2026-10-18 激励视频版本额外仅授予 `game_rewarded_video_events` SELECT。游戏 runtime 对新事件表只授 SELECT/INSERT，无 UPDATE/DELETE。游戏 runtime 对 `game_daily_logins` 也仅有 SELECT/INSERT（Postgres `ON CONFLICT` 需要 SELECT），无该表 UPDATE/DELETE；不对旧表扩权。
+- 核心查询数据库角色只获指定表 SELECT，默认只读事务；后续订阅状态、逐次事件查询分别按发布授权补充 SELECT，不以早期表总数作为现状。存档恢复使用独立受限写角色，见 [dashboard-save-repair.md](dashboard-save-repair.md)。2026-10-18 激励视频版本额外仅授予 `game_rewarded_video_events` SELECT。游戏 runtime 对新事件表只授 SELECT/INSERT，无 UPDATE/DELETE。游戏 runtime 对 `game_daily_logins` 也仅有 SELECT/INSERT（Postgres `ON CONFLICT` 需要 SELECT），无该表 UPDATE/DELETE；不对旧表扩权。
 - 随机 256 位会话 token，Redis 只保存其 SHA-256 摘要，8 小时过期。Cookie `Secure; HttpOnly; SameSite=Strict; Path=/h5dashboard/`。退出删除服务端会话。
 - 写方法仅精确接受本站 Origin、普通 JSON；登录限流使用 Redis 原子 INCR/EXPIRE，仅信任本机代理提供的真实 IP，密码校验最多并发两份。限流/存储失败闭锁。
 - HTML/API 禁缓存，API 不启用跨域；固定 CSP、不允许内联脚本。Nginx 此路由关闭 access log/mirror；应用不记录请求正文、密码、token、openid 或存档。
@@ -97,6 +179,14 @@
 - 仅重启看板；发布前既有会话发布后继续有效。正式游戏 API、常驻测试服与 noderun 的 PID/启动标识保持不变；118 个受保护产物、迁移、环境及 noderun 配置文件哈希与 Nginx 有效配置哈希不变。无迁移、无玩家数据写入、无凭据变更。
 - 发布与验证证据：`tmp/dashboard-login-date-release/{manifest,release-verification,public-verification}.json`。
 
+## 玩家激励视频查询发布（2026-10-22，北京时间）
+
+- 用户明确授权添加并部署；看板快照 `runtime/dashboard/releases/20261022T081533Z-player-video`，由原活动快照复制，仅替换 `dashboard/queries.mjs`、`dashboard/public/app.js`，旧快照保留用于回滚。
+- 严格 TDD 后通过类型检查、48 单测、64 看板测试、163 隔离 PG/Redis 集成测试及 2 运维测试，完整依赖审计 0 漏洞，独立代码审查无阻断项。
+- 正式 HTTPS 管理员登录、已部署脚本 DOM（jsdom，非真实浏览器）及独立只读 SQL 38 项验收通过，覆盖真实有记录玩家、零记录玩家、各点位总数/今日、时间、原始存档、404/401/Origin 和退出清除。无正式玩家测试写入。
+- 仅重启 `minigame-dashboard`；游戏和常驻测试 API 进程、产物、存储容器、环境文件、迁移、Nginx、订阅 worker 与定时器均回读对比未变。未执行迁移或权限变更，原有 13 个暂存区 blob 保持不变。
+- 发布、测试、审查及回滚证据：`tmp/dashboard-player-video/`。累计为现存上报事件，不代表平台核实数据，也不读取云存档计数。
+
 ## 发布/恢复注意事项
 
 发布须获用户明确授权。先全量测试、独立审查、正式备份及临时库实际恢复验证；再用生产 owner 执行 `node ops/dashboard-admin.mjs prepare`（迁移、最小权限及首次凭据生成），切换正式游戏 API 和后台服务；健康后安装 Nginx 路由并 `nginx -t`/reload，最后实际 HTTPS 登录/查询/退出及数据库回读。
@@ -104,3 +194,10 @@
 `prepare` 拒绝测试 DB、非本机地址和重复配置，不会覆盖既有管理员。发布留档 `tmp/dashboard-rollout/`。回退 API 时保留新增统计表，不删除真实记录；Nginx 站点旧文件备份 `/var/backups/minigame-dashboard/site-before-dashboard.conf`。不要使用反向迁移删除数据。测试环境不迁移、不重启，不复用正式会话/数据库。
 
 验证：`npm run typecheck`、`npm test`、`npm run test:dashboard`；隔离 Compose 下运行全部 `test/*.integration.ts`（候选 dist 使用 `MINIGAME_TEST_DIST_DIR`）；另跑 `node --test test/staging-ops.test.mjs`。
+
+## 钻石三倍统计补偿修复发布（2026-11-02 18:22:49，北京时间）
+
+- 仅看板三文件：`dashboard/save-repair.mjs`、`dashboard/backend.js`、`dashboard/public/app.js`。余额加N、累计获取统计加3N、累计消耗不变，异常旧账拒绝人工复核；预览与实际写入共用校验/计算。
+- 公网真实玩家只读预览、精确资源、会话存续、401/403、保证无效的apply400和审计数量不变均通过；未实际补偿任何玩家。
+- 独立代码/运维审查、131项看板/96项数据库集成/48项单测、10项发布恢复及1项审计只读权限测试、类型检查通过。只重启看板；游戏接口、测试服、noderun、环境、迁移、受保护产物和Nginx保持不变。
+- 证据：`tmp/diamond-three-times-release-retry/`，当前快照：`runtime/dashboard/releases/20261102T101812Z-diamond-triples`。

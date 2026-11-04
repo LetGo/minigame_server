@@ -1,3 +1,30 @@
+/* Saved retention snapshot: keep counts readable and scroll narrow screens. */
+.retention-expired { border: 2px solid #b45309; border-radius: var(--radius); background: #fef3c7; color: #78350f; padding: 1rem; margin: 1rem 0; font-weight: 600; }
+.retention-sample { display: block; margin-top: .35rem; font-size: .8125rem; font-variant-numeric: tabular-nums; }
+.retention-report-table { min-width: 1080px; font-variant-numeric: tabular-nums; }
+.retention-report-table th, .retention-report-table td { white-space: nowrap; }
+#retention-report-refresh { padding: .6rem 1rem; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-bg); color: var(--color-primary); margin-bottom: .75rem; }
+/* Save recovery stays inside the existing authenticated dashboard. */
+.save-repair-form { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; margin: 1rem 0; }
+.save-repair-form .form-group { flex: 1 1 280px; margin: 0; }
+.save-repair-editor { max-width: 850px; padding: 1.25rem; border: 1px solid var(--color-border); border-radius: var(--radius); }
+.save-repair-editor[hidden] { display: none; }
+.save-repair-editor input[type="checkbox"] { width: 1.25rem; height: 1.25rem; margin-top: .5rem; }
+.save-repair-table { width: 100%; margin: 1rem 0; font-variant-numeric: tabular-nums; }
+.save-repair-editor button { margin: .5rem .75rem .5rem 0; }
+#save-repair-apply { background: var(--color-warning); color: #111827; }
+/* Yesterday registration-cohort scene pies: SVG presentation attrs respect the existing CSP. */
+.scene-charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 1.25rem; align-items: start; }
+.scene-chart { min-width: 0; padding: 1.25rem; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-bg); box-shadow: var(--shadow); }
+.scene-chart h2 { font-size: 1.05rem; }
+.scene-chart-total { margin: .5rem 0; font-weight: 600; }
+.scene-chart > svg { display: block; width: 100%; max-width: 260px; height: auto; margin: .75rem auto; }
+.scene-legend { list-style: none; padding: 0; margin: 1rem 0 0; }
+.scene-legend li { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: .4rem .5rem; padding: .6rem 0; border-top: 1px solid var(--color-border); align-items: start; font-size: .8125rem; }
+.scene-legend li > svg { margin-top: .25rem; }
+.scene-legend-label { overflow-wrap: anywhere; }
+.scene-legend strong { grid-column: 2; font-variant-numeric: tabular-nums; }
+
 #login-screen { align-items: center; justify-content: center; padding: 20px; background: linear-gradient(135deg, #eef4ff, #f8fafc); }
 .login-box { height: fit-content; }
 .content pre { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -101,7 +128,8 @@ body.dark .login-box {
     color: var(--color-text);
 }
 
-.form-group input {
+.form-group input,
+#player-query-type {
     width: 100%;
     padding: 0.75rem;
     border: 1px solid var(--color-border);
@@ -271,6 +299,10 @@ button[type="submit"]:active {
 }
 
 .metric-card {
+    display: grid;
+    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+    column-gap: 0.75rem;
+    align-content: start;
     background: var(--color-bg);
     border: 1px solid var(--color-border);
     border-radius: var(--radius);
@@ -294,6 +326,36 @@ body.dark .metric-card {
     font-size: 2rem;
     font-weight: 700;
     color: var(--color-primary);
+    margin-bottom: 0.5rem;
+}
+
+.metric-card > h3,
+.metric-card > .metric-detail {
+    grid-column: 1 / -1;
+}
+
+.metric-card > .metric-value {
+    grid-column: 1;
+    grid-row: 2;
+    overflow-wrap: anywhere;
+}
+
+.metric-value.metric-value-better {
+    color: var(--color-success);
+}
+
+.metric-value.metric-value-worse {
+    color: var(--color-error);
+}
+
+.metric-comparison {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: center;
+    font-size: 0.8125rem;
+    font-weight: 400;
+    color: var(--color-muted);
+    overflow-wrap: anywhere;
     margin-bottom: 0.5rem;
 }
 
@@ -333,6 +395,15 @@ body.dark .metric-card {
 
 .history-table tbody tr:hover {
     background-color: rgba(37, 99, 235, 0.05);
+}
+
+.history-table tbody tr.history-weekend > td {
+    color: #15803d;
+    background-color: rgba(22, 163, 74, 0.08);
+}
+
+body.dark .history-table tbody tr.history-weekend > td {
+    color: #4ade80;
 }
 
 .sparkline {
@@ -562,7 +633,7 @@ body.dark .metric-card {
 .login-log-controls { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; margin: 1rem 0; }
 .login-log-controls button { padding: .5rem 1rem; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-bg); color: var(--color-text); }
 .history-table-container { overflow-x: auto; }
-.login-logs-table { min-width: 600px; }
+.login-logs-table { min-width: 720px; }
 .login-logs-table td { overflow-wrap: anywhere; }
 /* Production status panel (overview) */
 .production-status-host { margin: 0 0 2rem; }

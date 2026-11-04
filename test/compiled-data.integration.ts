@@ -20,6 +20,8 @@ test('compiled API and distributed SDK round trip over real HTTP with least-priv
     await owner.query(`GRANT USAGE ON SCHEMA public TO ${role}`);
     await owner.query(`GRANT SELECT, INSERT, UPDATE ON game_users, game_saves TO ${role}`);
     await owner.query(`GRANT SELECT, INSERT ON game_daily_logins TO ${role}`);
+    await owner.query(`GRANT INSERT ON game_login_events TO ${role}`);
+    await owner.query(`GRANT SELECT ON game_profiles TO ${role}`);
     const buildDir=resolve(process.env.MINIGAME_TEST_DIST_DIR ?? 'dist');
     const appModulePath=pathToFileURL(resolve(buildDir,'application.js')).href;
     const wechatModulePath=pathToFileURL(resolve(buildDir,'auth/wechat.client.js')).href;

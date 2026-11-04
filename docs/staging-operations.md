@@ -1,11 +1,13 @@
 # 常驻测试环境运维
 
+> 现行 API 与状态见 [接口总索引](README.md)；后文2026-10-17条目是历史首发记录。测试排行榜500/50，视频完成统计、登录clientVersion与scene均可用；逐次登录事件当前发布物未含采集。好友昨日视频奖励已退役，见 [测试退役记录](feature-retirements.md)。
+
 ## 当前布局
 
 - HTTPS：`https://sub2api.wdaveh5game.com/h5login-test/api`；前端见 `staging-integration.md`。
 - API：`minigame-staging.service`，ubuntu 用户，127.0.0.1:18741，内存384MiB、CPU50%，自动重启且开机启动。
 - 基础设施：`minigame-staging-infrastructure.service` 管理 Compose `minigame-staging`，独立 `compose.staging.yaml`。
-- PostgreSQL：127.0.0.1:15441，数据库 `minigame_staging`，owner仅运维使用，runtime `minigame_staging_app` 仅四张业务表 SELECT/INSERT/UPDATE，无DELETE、DDL。
+- PostgreSQL：127.0.0.1:15441，数据库 `minigame_staging`，owner仅运维使用，runtime `minigame_staging_app` 按已发布功能逐表最小授权：原业务/排行榜 SELECT/INSERT/UPDATE，逐日登录和视频事件 SELECT/INSERT，订阅按对应发布限定；不能按最初四表清单推断后续权限，无通用DELETE、DDL。
 - Redis：127.0.0.1:16391/0，独立随机密码、AOF、64MiB/noeviction；存储容器合计内存上限512MiB。
 - 命名卷：`minigame-staging_postgres_data`、`minigame-staging_redis_data`，不与正式或自动化测试共享。不执行 `down -v`。
 - 发布目录：Git忽略的 `runtime/staging/releases/<timestamp>-<sourceCommit>/`；`runtime/staging/current`指向当前发布。发布目录中 dist、migrations、package.json/lock、node_modules 均独立，不引用正式 dist 或共享 node_modules。
@@ -33,7 +35,7 @@ sudo docker compose --env-file .env.staging.infrastructure -p minigame-staging -
 2. `npm run typecheck`、`npm test`、`node --test test/staging-ops.test.mjs`，编译到新的 `tmp/<candidate>/`。
 3. 使用临时 `minigame-login-test` Compose（PG15439、Redis16389/15）跑所有集成测试，`MINIGAME_TEST_DIST_DIR`指向候选。严禁对常驻测试库或正式库运行会清库的自动化测试。
 4. 创建新的独立release目录，复制候选dist、migrations、package.json和package-lock.json。**进入解析后的真实release目录再执行 `npm ci --omit=dev --ignore-scripts`**。本机npm对指向符号链接current的相对`--prefix`出现错误的锁文件解析，不能据此修改项目lock或改用npm install解锁升级。
-5. 保留旧current目标，准备原子切换的新链接；确认测试发布授权后切换current。运行 `node ops/staging-admin.mjs migrate`，仅访问写死的staging owner端口/库并使用current发布目录的迁移；该命令幂等验证现有迁移checksum并回读runtime权限。迁移失败不重启API，应恢复旧current链接。
+5. 保留旧current目标，准备原子切换的新链接；确认测试发布授权后切换current。运行 `node ops/staging-admin.mjs migrate`，仅访问写死的staging owner端口/库并使用current发布目录的迁移；该命令验证现有迁移checksum并回读其覆盖的runtime权限，但不会自动补齐全部后续表授权；daily/video/leaderboards等须按目标发布单独核验并授最小权限。迁移失败不重启API，应恢复旧current链接。
 6. `sudo systemctl restart minigame-staging`；单独检查真正HTTP就绪及NRestarts。普通代码更新不需改Nginx或正式服务。若新增迁移不向后兼容，另行设计切换，不假设旧API与新schema始终兼容。
 7. 运行 `node ops/verify-staging.mjs` 做HTTPS测试，明确创建的是临时合成账号/会话，不是真实微信登录；脚本仅操作staging owner15441/Redis16391，结束删除自身临时数据并回读。结果在 `tmp/staging-setup/public-smoke.json`。此脚本也以测试token只读请求正式data/get，确认401隔离，不修改正式数据。
 8. 回读正式dist、.env和服务PID/启动时间未变，核对原站点路由及Nginx正文日志关闭。测试Compose用后down，保持常驻staging Compose在线。

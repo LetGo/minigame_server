@@ -13,7 +13,7 @@ test('retention table belongs to registration date, today is pending and yesterd
  assert.equal(table.children[0].children[0].children[5].textContent,'次日回访 / 当日新增');
  assert.equal(rows[0][0],'2026-10-20（截至现在）');assert.equal(rows[0][4],'待次日统计');assert.equal(rows[0][5],'待次日统计');
  assert.equal(rows[1][0],'2026-10-19');assert.equal(rows[1][4],'50.00%（实时）');assert.equal(rows[1][5],'2 / 4');
- assert.equal(rows[2][0],'2026-10-18');assert.equal(rows[2][4],'25.00%');assert.equal(rows[2][5],'2 / 8');
+ assert.equal(rows[2][0],'2026-10-18（周日）');assert.equal(rows[2][4],'25.00%');assert.equal(rows[2][5],'2 / 8');
  assert.equal(rows[3][4],'—');assert.equal(rows[4][4],'—');assert.equal(rows[4][5],'— / 3');
  const card=view.children[0].children.find(e=>e.children[0].textContent==='实时次日留存');assert.equal(card.children[1].textContent,'50.00%');assert.match(card.children[2].textContent,/昨日新增 4 · 今日回访 2/);
  assert.match(view.textContent,/次日留存按注册日期归属/);assert.doesNotMatch(view.textContent,/NaN|Infinity|回访 \/ 昨日新增/);assert.equal(data.history[0].date,'2026-10-18','response order unchanged');

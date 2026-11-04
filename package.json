@@ -15,7 +15,7 @@
     "test": "tsx --test --test-concurrency=1 test/*.test.ts",
     "test:dashboard": "node --test --test-concurrency=1 test/dashboard*.test.mjs",
     "pretest:integration": "npm run build",
-    "test:integration": "tsx --test --test-concurrency=1 test/*.integration.ts",
+    "test:integration": "tsx --test --test-concurrency=1 test/*.integration.ts test/*.integration.mjs",
     "start": "node --env-file=.env dist/main.js",
     "dev": "node --env-file=.env --import tsx src/main.ts",
     "migrate": "node --env-file=.env --import tsx scripts/migrate.ts",
@@ -39,6 +39,7 @@
     "@types/pg": "^8.23.1",
     "@types/supertest": "^7.2.1",
     "esbuild": "0.28.2",
+    "jsdom": "26.1.0",
     "supertest": "^7.3.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"

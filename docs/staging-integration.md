@@ -2,7 +2,9 @@
 
 ## 1. 地址与状态
 
-2026-10-17 已部署常驻测试环境，包含最新登录、普通 JSON 存档、头像昵称、邀请拉新与领取登记。
+常驻测试环境已部署登录、普通 JSON 存档、可空头像昵称、普通邀请与领取、来源 scene、排行榜（500/50）、玩家自身视频统计与订阅提醒；完整端点见 [接口总索引](README.md)。好友昨日视频奖励已退役，领取返回404、列表无奖励字段。逐次登录事件当前测试发布物未含该采集，勿与正式混淆。
+
+2026-10-23 12:38:59（北京时间）测试登录接口已支持可选 `clientVersion`，例如 `{ "code": "...", "clientVersion": "2.0.7" }`；旧客户端仍可只传 `code`。正式服同日 18:14 也已发布该字段。规则、示例及验收边界见 [`login-client-version.md`](login-client-version.md)，两环境登录态和存档仍须隔离。
 
 | 环境 | API 前缀 |
 |---|---|
@@ -57,21 +59,37 @@ function postApi(path, body, accessToken) {
 
 HTTPS 测试响应带 `X-Minigame-Environment: staging`，可用于联调确认，但此头不是鉴权凭据。
 
+资料恢复联调沿用上面的 postApi，无需另一份客户端封装：
+
+```js
+// 首先用首次 token 完成邀请来源上报，再测试重登。
+await postApi('/users/profile', { nickname: '玩家昵称', avatarUrl: null }, auth.accessToken);
+// 省略头像保留原值；null/空字符串清空。随后获取新 code 重登并检查资料恢复。
+```
+
+请求/响应、展示安全和空头像示例统一见 [invite-api.md](invite-api.md)，登录返回字段见 [wechat-login-api.md](wechat-login-api.md)。
+
 ## 3. 接口速查
 
 所有请求均为 POST、普通 JSON。除登录外，必须携带 `Authorization: Bearer <accessToken>`。
 
 | 完整测试地址 | 请求正文 |
 |---|---|
-| `https://sub2api.wdaveh5game.com/h5login-test/api/auth/wechat-login` | `{"code":"wx.login返回的新鲜code"}` |
+| `https://sub2api.wdaveh5game.com/h5login-test/api/auth/wechat-login` | code必填；clientVersion、scene可选 |
 | `https://sub2api.wdaveh5game.com/h5login-test/api/users/profile` | `{"nickname":"玩家昵称","avatarUrl":"https://example.com/avatar.png"}` |
 | `https://sub2api.wdaveh5game.com/h5login-test/api/invites/report` | `{"inviterUid":"分享者的测试UID"}` |
 | `https://sub2api.wdaveh5game.com/h5login-test/api/invites/list` | `{"cursor":null,"limit":20}` |
 | `https://sub2api.wdaveh5game.com/h5login-test/api/invites/claim` | `{"inviteeUid":"列表中的被邀请者UID"}` |
 | `https://sub2api.wdaveh5game.com/h5login-test/api/data/get` | `{}` |
 | `https://sub2api.wdaveh5game.com/h5login-test/api/data/save` | `{"version":0,"data":"{\"coins\":0}"}` |
+| `https://sub2api.wdaveh5game.com/h5login-test/api/users/source-scene` | `{"scene":1007}` |
+| `https://sub2api.wdaveh5game.com/h5login-test/api/leaderboards/report` | `{"type":"stage","value":500}` |
+| `https://sub2api.wdaveh5game.com/h5login-test/api/leaderboards/list` | `{"type":"stage"}` |
+| `https://sub2api.wdaveh5game.com/h5login-test/api/analytics/rewarded-video/completed` | eventId、placement必填；clientInfo可选 |
+| `https://sub2api.wdaveh5game.com/h5login-test/api/subscriptions/checkin/template` | `{}` |
+| `https://sub2api.wdaveh5game.com/h5login-test/api/subscriptions/checkin/report` | eventId、templateId、status均必填 |
 
-完整字段、响应、业务拒绝原因及客户端发奖边界见 `invite-api.md`；登录见 `wechat-login-api.md`；存档 CAS 见 `save-api.md`。使用这些文档时统一替换为本指南的测试 API 前缀，其余契约不变。
+完整字段与契约链接见 [接口总索引](README.md)；普通邀请与资料见 [invite-api.md](invite-api.md)，登录见 [wechat-login-api.md](wechat-login-api.md)，存档 CAS 见 [save-api.md](save-api.md)。使用这些文档时统一替换为本指南的测试 API 前缀，其余契约不变。
 
 ### 可选存档 SDK
 
@@ -100,14 +118,14 @@ SDK 默认仍指向正式环境；旧版固定路径校验不接受测试前缀�
 
 测试数据库初始为空，不复制正式用户/存档；正式账号首次进入测试环境可以被视为测试新用户。后续重复测新注册时需人工重置指定测试账号，当前没有开放公网重置、管理员或假登录接口。不要通过修改客户端 isNewUser 伪造资格。
 
-## 新增来源场景接口（测试服已发布）
+## 来源场景（两环境已发布）
 
-`POST /users/source-scene` 已于2026-10-17部署到本指南的常驻测试环境及正式环境。首次注册后用同一次 token 上报启动时 `options.scene`；首次写入后不可改，和邀请归因独立。完整请求、响应、幂等与错误码见 [source-scene-api.md](source-scene-api.md)。公网合成会话检查已通过，仍需客户端真机联调。
+`POST /users/source-scene` 已于2026-10-17部署到本指南的常驻测试环境及正式环境。首次注册后用同一次 token 上报启动时 `options.scene`；首次写入后不可改，和邀请归因独立。完整请求、响应、幂等与错误码见 [source-scene-api.md](source-scene-api.md)。登录请求自身的可选 scene 也已部署，见 [login-scene.md](login-scene.md)；首次登录传入后无需重复独立上报。公网合成会话检查不代替客户端真机联调。
 
 ## 5. 隔离与验证边界
 
 - 独立常驻后端、数据库、Redis、登录会话、限流和存档；测试数据不写入正式数据库。
 - 同机运行，服务器资源与微信 AppID 上游配额仍有共享边界，不是独立机器或独立小游戏。
 - 公网检查以明确的临时测试账号/会话验证邀请与存档成功链路，测试数据及会话已清理；真实微信无效 code 路径也通过。
-- **尚未获得真实客户端新鲜 code，不能把自动化/临时会话检查当作真实微信用户成功登录或卡片分享验收。** 第4节仍需前端真机联调。
+- **自动化/临时会话检查不是微信真机验收。** 2026-10-23 测试客户端版本 2.0.7 有真实成功登录记录（见 [版本契约](login-client-version.md)），但不代表所有分享/领取/广告链路已完成真机验收；第4节仍需按具体客户端验证。
 - 测试环境为持续联调用途，非自动化测试使用的15439/16389临时 Compose。不要把正式个人资料或敏感数据导入测试环境。

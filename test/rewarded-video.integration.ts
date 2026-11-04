@@ -18,8 +18,10 @@ test('compiled rewarded-video completion HTTP records authenticated player event
  await owner.query(`GRANT USAGE ON SCHEMA public TO ${role}`);
  await owner.query(`GRANT SELECT,INSERT,UPDATE ON game_users TO ${role}`);
  await owner.query(`GRANT SELECT,INSERT ON game_daily_logins TO ${role}`);
+ await owner.query(`GRANT INSERT ON game_login_events TO ${role}`);
+ await owner.query(`GRANT SELECT ON game_profiles TO ${role}`);
  if((await owner.query("SELECT to_regclass('game_rewarded_video_events') AS name")).rows[0].name)await owner.query(`GRANT SELECT,INSERT ON game_rewarded_video_events TO ${role}`);
- const build=resolve(process.env.MINIGAME_TEST_DIST_DIR??'tmp/rewarded-video/candidate-dist');
+ const build=resolve(process.env.MINIGAME_TEST_DIST_DIR??'dist');
  const {createApplication}=await import(pathToFileURL(resolve(build,'application.js')).href);
  const {WechatClient}=await import(pathToFileURL(resolve(build,'auth/wechat.client.js')).href);
  const config=loadConfig({WECHAT_APP_ID:appId,WECHAT_APP_SECRET:'explicit-video-test-stub',DATABASE_URL:`postgresql://${role}:isolated-video-test-only@127.0.0.1:15439/minigame_test`,REDIS_URL:'redis://127.0.0.1:16389/15'});

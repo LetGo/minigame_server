@@ -1,13 +1,48 @@
 # 本机生产部署与运维
 
+> 当前功能/环境状态以 [接口总索引](README.md) 及各契约为准；本文按历史发布批次保留证据、当时数据和回滚位置，不能直接用旧整包回滚恢复已退役功能。正式排行榜现为101/30；登录clientVersion与scene、逐次登录事件、留存日报均已发布；好友昨日视频奖励已退役，详见 [退役记录](feature-retirements.md)。本文不是本次部署授权。
+
+## 可选客户端版本正式发布（2026-10-23 18:14北京时间）
+
+- 用户明确确认正式发布。以当前正式 dist 为基础，仅覆盖 `auth/auth.controller.js`、`auth/auth.service.js`；未整包发布其他工作区改动。
+- 236682 字节私密正式备份实际恢复至隔离 PostgreSQL，核对全部 10 张业务表和原 10 条迁移后删除 scratch；随后 owner 仅应用 011，锁等待 3 秒/语句 15 秒上限，无权限变更。旧字段与 ACL、原迁移校验和保持不变。
+- 精确正式候选 190 集成、48 单元、74 看板测试通过，类型检查通过、审计 0 漏洞；最终功能＋运维审查哈希绑定三脚本、两个模块、迁移 011，通过且无阻断。
+- 仅重启 `minigame-login`，启动 18:13:52，验收完成 18:14:08；active/running、NRestarts0，无错误类日志。测试/看板服务、Nginx/配置/凭据、四个持久存储容器及原 Git index 校验未变。
+- 22 项公网/部署构建验收覆盖旧 `{code}`、新版本保存/更新/省略保留、重启前 token、存档原文与 CAS、资料恢复。成功登录使用显式微信替身，不冒充正式客户端真实登录；真实微信无效 code 路径已验证。
+- 原有 262 用户、81 存档保留，全部 81 份存档版本/哈希未变；验收自有合成账号、相关业务行与会话已删除回读；临时测试 Compose 已关闭，未停止持久环境。
+- 证据及私密备份：`tmp/login-client-version-production/verification-summary.json`、`production-before.dump`、`previous-dist/`。此目录不可作为客户端附件。回滚只恢复旧构建并重启正式 API，保留增量列/已上报版本；旧后端拒绝新字段，客户端必须同时停止上报，不能声称回滚对新客户端透明。
+
+## stage / boss 排行榜正式发布（2026-10-19）
+
+### 历史300/30中间版本发布（2026-10-19 22:27:24北京时间）
+
+- 用户另行明确授权；正式服改为stage≥300、boss≥30，包含边界。只改编译产物中的两个常量，不迁移表、不更改权限/Nginx/Redis配置；测试服仍500/50。
+- 复用已验证300/30候选（118集成、18单测、16Dashboard、40玩家/200操作真实HTTP smoke）；发布前复核源码/候选哈希和仅一个编译文件差异，typecheck通过。
+- 77929字节0600生产备份实际恢复临时库并删除scratch，核对120用户、42存档、1成绩及全部7迁移。发布后这些记录均保留，42存档版本/内容哈希不变。
+- 首次发布双路公网监控叠加触发现有Nginx api_rate10r/s（日志31条限流），保护流程自动回滚。将就绪检查改为本机端口，保持单路公网采样，不改变Nginx；双路公网/本机各20次回归均401后重新发布成功。
+- 最终切换100ms间隔公网采样21次，8次502，首次失败到恢复884.103ms；上一成功到恢复995.328ms。这只是最终切换的采样估计，不是精确停服时间，也不包含首次发布/回滚的全部影响。最终服务active/running，NRestarts0，启动22:27:24。
+- 正式HTTPS23项榜单+42项既有业务回归通过，临时数据/Redis键清理回读；正式Redis两榜epoch分别min=300/30且与PG成绩一致，当前均无达标已上报成绩。不从云存档回填。123068个受保护文件、测试/看板进程、4个存储容器进程校验未变。
+- 证据及回滚产物：`tmp/lower-threshold-production-deploy/verification-summary.json`、`previous-dist/`、`attempt-1/`。回滚只恢复旧dist和重启正式API，不恢复旧DB/会话，不修改测试服。
+
+### 首次排行榜发布（14:44北京时间，历史500/50版本）
+
+- 用户明确授权正式部署；stage≥500、boss≥50才入Redis，所有历史最高成绩仍持久保存PG。未达门槛rank=null/value=最高值。两环境身份/数据独立。
+- 候选产物与常驻测试服逐文件哈希一致；117集成、18单测、16Dashboard、typecheck通过，生产依赖审计0漏洞；12运维用例中11通过，1个需专用压测Compose的真实smoke本轮跳过（此前门槛压测已验证）。
+- 生产库备份56862字节、0600，实际恢复临时库核对98用户/34存档及001–006迁移后删除scratch。owner应用007；既有minigame_app仅新增成绩表SELECT/INSERT/UPDATE，无DELETE/DDL。
+- 仅替换正式dist并重启minigame-login；服务active/running、NRestarts0，产物回读匹配。测试服/看板进程、全部PG/Redis容器进程及18966个受保护文件校验通过；无Nginx、凭据、Redis资源变更。
+- 正式HTTPS排行榜23项检查通过：未上报/零分/未达标/包含边界/不降分、两榜、UID同分顺序、资料、PG/Redis一致、参数及鉴权、跨环境隔离；既有登录/存档/邀请/scene/每日50份业务42项回归通过。合成账号/成绩/会话/限流键清理回读；不代替真实微信新鲜code或客户端高分真机验收。
+- 原98用户全部保留，34存档版本和内容哈希完全未变。一次性自动测试Compose已关闭。
+- 证据/备份 `tmp/leaderboard-production-deploy/`；旧正式产物 `live-previous-dist/` 与只读备份 `previous-dist/`。回滚只恢复旧dist并重启minigame-login，保留007及真实成绩，不回退DB或覆盖.env。
+
+
 ## 已部署组件
 
 - 入口：`https://sub2api.wdaveh5game.com/h5login/api/auth/wechat-login`，POST JSON。
 - API：`minigame-login.service`，ubuntu 用户，`127.0.0.1:18740`，512 MiB 内存上限、1 CPU 配额、异常自动重启、开机启动。
 - 存储：独立 Compose 项目 `minigame-prod`，`compose.production.yaml`。PostgreSQL 18、Redis 8 镜像按当前已安装镜像 digest 固定，不跟随 latest 自动升级。
-- PostgreSQL：`127.0.0.1:15440`，数据库 `minigame`。管理员 `minigame_owner` 负责迁移；运行用户 `minigame_app` 仅有用户、存档、资料、邀请四表 SELECT/INSERT/UPDATE，无建库、建角色、超级用户、DELETE 或迁移表访问权限。
-- Redis：`127.0.0.1:16390`，独立密码、AOF everysec、96 MiB maxmemory/noeviction。Redis 内存不足时登录会失败而非悄悄驱逐会话，需要监控并扩容。令牌到期/会话丢失需重新登录。
-- 存储均为命名卷，非测试 tmpfs；容器资源上限为 PG 768 MiB、Redis 192 MiB。禁止 `docker compose down -v`，避免删除生产数据。
+- PostgreSQL：`127.0.0.1:15440`，数据库 `minigame`。管理员 `minigame_owner` 负责迁移；运行用户 `minigame_app` 按功能表最小授权：原用户/存档/资料/邀请及排行榜需要 SELECT/INSERT/UPDATE，逐日登录与视频事件为 SELECT/INSERT，逐次登录事件仅 INSERT；订阅权限按对应发布审查限定。不能以首次四表清单当作后续全部权限；无建库、建角色、超级用户、通用 DELETE/DDL 或迁移台账访问权限。
+- Redis：`127.0.0.1:16390`，独立密码、AOF everysec、512 MiB maxmemory/noeviction（2026-10-19另行授权在线扩容并重建持久化生效）。Redis 内存不足时登录会失败而非悄悄驱逐会话，需要监控并扩容。令牌到期/会话丢失需重新登录。
+- 存储均为命名卷，非测试 tmpfs；容器资源上限为 PG 768 MiB、Redis 1536 MiB/1CPU。禁止 `docker compose down -v`，避免删除生产数据。
 - `minigame-infrastructure.service` 管理基础设施开机启动；容器自身配置 unless-stopped。停止 API 不会停止数据库。
 - 原有 sub2api 的 PostgreSQL/Redis 未复用、未重启、未改动。
 
@@ -129,7 +164,7 @@ Redis 客户端只有限次重连；若 Redis 持续中断导致客户端停止�
 - 正式 HTTPS 激励视频验收 37 项通过，覆盖鉴权、会话身份、JSON 及服务端时间落库、跨 token/并发幂等、异值冲突、玩家隔离、无效输入拒绝、dashboard 数据库对数；事件非零时实际公网 HTML/JS/API 的 DOM 验收 145 项通过（jsdom，非真实浏览器）。
 - 既有正式业务 42 项、后台 26 项、测试服 29 项公网回归通过；来源、邀请每日 50 限制、存档原文/CAS/64KiB 边界保持正常，原 `/` 200、`/request-logs` 401、`/tqwz-query/` 200。
 - 合成账号、视频事件、邀请、存档、会话和限流键均清理并回读。原 18 用户全部保留，原 4 存档版本及内容哈希未变；09:04 回读 19 用户、4 存档，新增的真实用户未被清理。合成事件不留在累计中；此时视频事件 0，客户端成功接入后开始积累。
-- 常驻测试服尚未发布视频接口，测试新路由仍 404。客户端真实 `isEnded === true` 回调及上报仍需联调；自动化不代表广告平台核验或真机完整观看。
+- 当次2026-10-18发布时测试视频路由仍404；随后2026-10-19排行榜发布已为测试迁移006并开放此API，见 [leaderboards-operations.md](leaderboards-operations.md)。客户端真实 `isEnded === true` 回调及上报仍需联调；自动化不代表广告平台核验或真机完整观看。
 - 本机证据和回滚程序位于 `tmp/rewarded-video-production/`。回滚只恢复旧 dist / Dashboard 快照并重启对应服务，保留迁移 006 与真实事件，不删除业务数据。
 
 ### 视频看板改为今日次数（2026-10-18 09:12 北京时间）
@@ -162,3 +197,7 @@ Redis 客户端只有限次重连；若 Redis 持续中断导致客户端停止�
 - 缓存、连接池、UI 提示均有 RED→GREEN 证据；18 单测、16 Dashboard、90 集成、4 运维及 typecheck 全通过，依赖审计 0 漏洞，独立审查通过。隔离真实 PostgreSQL/Redis 的 25 个冷缓存并发请求加 25 个热缓存请求仅执行一次概览统计。
 - 正式 HTTPS/DOM 64 项验收通过：10 请求并发保持相同快照，真实等待 TTL 后新快照时间递增；只读角色保留，独立默认连接 JIT 仍开启。相同 SQL 抽样默认连接耗时 639.721–701.329 ms；看板连接 2.538–2.837 ms、JIT 编译耗时 0。小样本并非容量压测。原后台 26 项公网回归通过；DOM 为 jsdom，不是用户设备验收。
 - 只重启 Dashboard。游戏 API、常驻测试服务进程与产物、环境文件、迁移和 Nginx 哈希逐项不变；临时自动化 Compose 已停止。证据/回滚 `tmp/dashboard-overview-cache/`，保留旧快照，回滚仅回切看板并重启它。
+
+## 登录 scene 发布摘要（2026-10-28/29）
+
+测试2026-10-28 22:15:23、正式2026-10-29 08:49:17（北京时间）已支持可选scene；当前契约见 [login-scene.md](login-scene.md)。测试首发仅替换两个auth JS，无迁移/新增权限；46项精确构建、38项场景、29项旧公网检查通过，fixtures清理及数据保全通过，证据 `tmp/login-scene-staging/`。当次正式未动是历史操作边界，不代表现在正式不支持。逐次登录事件后续正式发布与恢复见 [login-events.md](login-events.md)。

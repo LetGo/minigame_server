@@ -21,6 +21,8 @@ test('compiled referral APIs over real HTTP with least-privilege PG, real Redis 
     await owner.query(`GRANT USAGE ON SCHEMA public TO ${role}`);
     await owner.query(`GRANT SELECT, INSERT, UPDATE ON game_users, game_saves, game_profiles, game_invitations TO ${role}`);
     await owner.query(`GRANT SELECT, INSERT ON game_daily_logins TO ${role}`);
+    await owner.query(`GRANT INSERT ON game_login_events TO ${role}`);
+    await owner.query(`GRANT SELECT ON game_rewarded_video_events TO ${role}`);
     const buildDir = resolve(process.env.MINIGAME_TEST_DIST_DIR ?? 'dist');
     const { createApplication } = await import(pathToFileURL(resolve(buildDir, 'application.js')).href);
     const { WechatClient } = await import(pathToFileURL(resolve(buildDir, 'auth/wechat.client.js')).href);

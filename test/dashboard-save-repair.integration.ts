@@ -1,0 +1,74 @@
+import assert from 'node:assert/strict';
+import {test} from 'node:test';
+import {randomBytes,randomUUID} from 'node:crypto';
+import {Pool} from 'pg';
+import {migrate} from '../src/database/migrate.js';
+// Deliberately fixed test-only storage. Never read production credentials here.
+const url='postgresql://minigame_test:local_integration_only@127.0.0.1:15439/minigame_test';
+test('save repair uses isolated PG18 with readonly lookup, atomic audited mutation, version conflict and retry dedup',async t=>{
+ const moduleUrl=new URL('../dashboard/save-repair.mjs',import.meta.url).href;const {createSaveRepair}=await import(moduleUrl);assert.equal(typeof createSaveRepair,'function');
+ const owner=new Pool({connectionString:url,max:2}),tag=randomBytes(4).toString('hex'),app='repair_'+tag,foreign='repairf_'+tag;
+ const reader='repair_read_'+tag,writer='repair_write_'+tag,password=randomBytes(16).toString('hex');let readPool:Pool|undefined,writePool:Pool|undefined;
+ t.after(async()=>{await readPool?.end();await writePool?.end();await owner.query('DELETE FROM game_dashboard_save_repairs WHERE app_id=ANY($1::varchar[])',[[app,foreign]]);await owner.query('DELETE FROM game_users WHERE app_id=ANY($1::varchar[])',[[app,foreign]]);for(const role of [reader,writer]){await owner.query(`DROP OWNED BY ${role}`);await owner.query(`DROP ROLE ${role}`);}await owner.end();});
+ await migrate(owner);
+ for(const role of [reader,writer]){await owner.query(`CREATE ROLE ${role} LOGIN PASSWORD '${password}'`);await owner.query(`GRANT USAGE ON SCHEMA public TO ${role}`);await owner.query(`GRANT SELECT ON game_users,game_profiles,game_saves TO ${role}`);}
+ await owner.query(`ALTER ROLE ${reader} SET default_transaction_read_only=on`);
+ await owner.query(`GRANT UPDATE(data,version,updated_at) ON game_saves TO ${writer}`);
+ await owner.query(`GRANT SELECT,INSERT ON game_dashboard_save_repairs TO ${writer}`);
+ const connect=(role:string)=>{const roleUrl=new URL(url);roleUrl.username=role;roleUrl.password=password;return new Pool({connectionString:roleUrl.href,max:3,statement_timeout:5000});};readPool=connect(reader);writePool=connect(writer);
+ assert.equal((await readPool.query('SELECT current_user')).rows[0].current_user,reader);
+ assert.equal((await writePool.query('SELECT current_user')).rows[0].current_user,writer);
+ assert.equal((await readPool.query('SHOW default_transaction_read_only')).rows[0].default_transaction_read_only,'on');
+ const id=randomUUID(),other=randomUUID(),missing=randomUUID();
+ for(const [uid,aid,openid]of [[id,app,'same_openid'],[other,foreign,'same_openid'],[missing,app,'no_save']])await owner.query('INSERT INTO game_users(id,app_id,open_id,first_login_completed) VALUES($1,$2,$3,true)',[uid,aid,openid]);
+ const raw='{ "Dia":3,"_getDia":3309,"_useDia":3300,"Is_Remove_AD_All":false,"huge":900719925474099312345,"nested":{"Dia":20}}\n';
+ await owner.query('INSERT INTO game_saves(user_id,data,version) VALUES($1,$3,5),($2,$3,5)',[id,other,raw]);
+ const service=createSaveRepair({pool:readPool,writePool,appId:app,enabled:true}),disabled=createSaveRepair({pool:readPool,appId:app});
+ const found=await service.lookup({openid:'same_openid'});assert.equal(found.user.id,id);assert.equal(found.save.version,5);assert.equal(found.fields.Dia,3);assert.equal(found.writable,true);
+ const base={openid:'same_openid',version:found.save.version,fingerprint:found.fingerprint,changes:{removeAds:true,addDia:100}};
+ const preview=await service.preview(base);assert.equal(preview.after.Dia,103);assert.equal(preview.after._getDia,3609);assert.equal(preview.after._useDia,3300);assert.deepEqual(preview.delta,{Dia:100,_getDia:300,_useDia:0});
+ assert.equal((await owner.query('SELECT data FROM game_saves WHERE user_id=$1',[id])).rows[0].data,raw);
+ await assert.rejects(()=>disabled.apply({...base,requestId:randomUUID(),reason:'测试'},'admin'),/SAVE_REPAIR_DISABLED/);
+ const operation={...base,requestId:randomUUID(),reason:'恢复测试'};
+ const applied=await service.apply(operation,'admin');assert.equal(applied.save.version,6);assert.equal(applied.fields.Dia,103);
+ const stored=(await owner.query('SELECT data,version FROM game_saves WHERE user_id=$1',[id])).rows[0];assert.equal(stored.data,raw.replace('"Dia":3,','"Dia":103,').replace('"_getDia":3309','"_getDia":3609').replace('"Is_Remove_AD_All":false','"Is_Remove_AD_All":true'));
+ assert.equal((await owner.query('SELECT data FROM game_saves WHERE user_id=$1',[other])).rows[0].data,raw);
+ const audit=(await owner.query('SELECT * FROM game_dashboard_save_repairs WHERE app_id=$1',[app])).rows;assert.equal(audit.length,1);assert.equal(audit[0].before_data,raw);assert.equal(audit[0].after_data,stored.data);assert.equal(audit[0].actor,'admin');assert.deepEqual(audit[0].result.diamondCompensation,{amount:100,before:{Dia:3,_getDia:3309,_useDia:3300},after:{Dia:103,_getDia:3609,_useDia:3300},delta:{Dia:100,_getDia:300,_useDia:0}});
+ const retry=await service.apply(operation,'admin');assert.equal(retry.alreadyApplied,true);assert.equal(retry.save.version,6);
+ await assert.rejects(()=>service.apply({...operation,changes:{addDia:200}},'admin'),/SAVE_REPAIR_REQUEST_CONFLICT/);
+ await assert.rejects(()=>service.apply({...operation,requestId:randomUUID()},'admin'),/SAVE_REPAIR_VERSION_CONFLICT/);
+ assert.equal((await service.lookup({openid:'no_save'})).save.exists,false);
+ const absent={...operation,openid:'no_save',version:1};await assert.rejects(()=>service.preview(absent),/SAVE_REPAIR_INVALID_REQUEST|SAVE_REPAIR_NO_SAVE/);
+ for(const input of [{openid:'same_openid',appId:foreign},{openid:'same_openid',userId:other}])await assert.rejects(()=>service.lookup(input),/SAVE_REPAIR_INVALID_REQUEST/);
+ for(const more of [{data:'{}'},{appId:foreign},{userId:other},{force:true}])await assert.rejects(()=>service.preview({...base,...more}),/SAVE_REPAIR_INVALID_REQUEST/);
+ // A failed audit INSERT must roll back the save UPDATE in the same transaction.
+ const current=await service.lookup({openid:'same_openid'});
+ const next={openid:'same_openid',version:current.save.version,fingerprint:current.fingerprint,changes:{addDia:7},requestId:randomUUID(),reason:'事务回滚测试'};
+ await owner.query(`REVOKE INSERT ON game_dashboard_save_repairs FROM ${writer}`);
+ await assert.rejects(()=>service.apply(next,'admin'));
+ assert.equal((await owner.query('SELECT data FROM game_saves WHERE user_id=$1',[id])).rows[0].data,stored.data);
+ await owner.query(`GRANT INSERT ON game_dashboard_save_repairs TO ${writer}`);
+ const simultaneous=await Promise.all([service.apply(next,'admin'),service.apply(next,'admin')]);assert.equal(simultaneous.filter(x=>x.alreadyApplied).length,1);assert.equal(simultaneous[0].fields.Dia,110);
+ const latest=await service.lookup({openid:'same_openid'});
+ const contenders=await Promise.allSettled([1,2].map(()=>service.apply({openid:'same_openid',version:latest.save.version,fingerprint:latest.fingerprint,changes:{addDia:1},requestId:randomUUID(),reason:'并发版本校验'},'admin')));
+ assert.equal(contenders.filter(x=>x.status==='fulfilled').length,1);assert.match(String((contenders.find(x=>x.status==='rejected') as PromiseRejectedResult).reason),/SAVE_REPAIR_VERSION_CONFLICT/);
+ // Exercise the actual authenticated HTTP route with real read/write PG pools.
+ const {createDashboardServer}=await import(new URL('../dashboard/backend.js',import.meta.url).href);
+ const {scryptSync}=await import('node:crypto'),{default:request}=await import('supertest');
+ const sessions=new Map(),redis={withCommandOptions(){return this;},async get(k:string){return sessions.get(k)??null;},async set(k:string,v:string){sessions.set(k,v);return 'OK';},async del(k:string){return sessions.delete(k)?1:0;},async eval(){return 1;}};
+ const salt='0123456789abcdef0123456789abcdef',pw='test-only-repair-http-password',config={username:'admin',passwordHash:salt+':'+scryptSync(pw,salt,64).toString('hex'),appId:app,origin:'https://repair.example.test',basePath:'/h5dashboard/',saveRepairEnabled:true};
+ const server=createDashboardServer({pool:readPool,redis,config,queries:{overview:async()=>({}),player:async()=>null},saveRepair:service});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));
+ try{const api=request(server),login=await api.post('/h5dashboard/api/login').set('Origin',config.origin).send({username:'admin',password:pw}).expect(200),cookie=String(login.headers['set-cookie']?.[0]??'').split(';')[0]!;
+ const post=(operation:string,body:object)=>api.post('/h5dashboard/api/save-repair/'+operation).set('Cookie',cookie).set('Origin',config.origin).send(body);
+ const row=(await post('lookup',{openid:'same_openid'}).expect(200)).body;
+ const change={openid:'same_openid',version:row.save.version,fingerprint:row.fingerprint,changes:{addDia:2}};
+ const preview=(await post('preview',change).expect(200)).body;assert.equal(preview.after._getDia-preview.before._getDia,6);
+ const result=(await post('apply',{...change,requestId:randomUUID(),reason:'完整 HTTP 链路测试'}).expect(200)).body;
+ const checked=(await post('lookup',{openid:'same_openid'}).expect(200)).body;assert.equal(checked.save.version,result.save.version);assert.equal(checked.fields.Dia,row.fields.Dia+2);assert.equal(checked.fields._useDia,3300);
+ await post('apply',{...change,requestId:randomUUID(),reason:'旧版本拒绝'}).expect(409);
+ await post('preview',{...change,data:'{}'}).expect(400);
+ }finally{await new Promise<void>(r=>server.close(r));}
+ await assert.rejects(()=>writePool!.query('DELETE FROM game_saves WHERE user_id=$1',[id]));
+ await assert.rejects(()=>writePool!.query('UPDATE game_dashboard_save_repairs SET actor=$1 WHERE app_id=$2',['x',app]));
+ await assert.rejects(()=>readPool!.query('UPDATE game_saves SET version=version+1 WHERE user_id=$1',[id]));
+});

@@ -114,7 +114,12 @@ test('referral safety, races and failure boundaries with real isolated PostgreSQ
       ' https://example.com/a', 'https://example.com/\nabc', 'https://example.com/' + 'x'.repeat(2048), String.fromCharCode(0xd800)]) {
       await call('users/profile', fresh.accessToken, { nickname: 'valid', avatarUrl }, 400);
     }
-    for (const payload of [[], {}, { nickname: 'only' }, { nickname: 'valid', avatarUrl: 'https://example.com/a', openid: 'forged' }]) {
+    const nicknameOnly = await call('users/profile', fresh.accessToken, { nickname: 'only' });
+    assert.equal(nicknameOnly.user.avatarUrl, 'https://example.com/avatar.png');
+    await call('users/profile', fresh.accessToken, { nickname: '空头像昵称', avatarUrl: '' });
+    item = (await call('invites/list', other.accessToken, {})).items.find((row: any) => row.inviteeUid === fresh.user.id);
+    assert.equal(item.nickname, '空头像昵称'); assert.equal(item.avatarUrl, null);
+    for (const payload of [[], {}, { avatarUrl: null }, { nickname: 'valid', avatarUrl: 'https://example.com/a', openid: 'forged' }]) {
       await call('users/profile', fresh.accessToken, payload, 400);
     }
   });
