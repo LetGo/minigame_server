@@ -1,6 +1,6 @@
 # 接口与环境总索引
 
-本页统一客户端入口和环境状态；字段边界、响应、错误与幂等以链接的详细契约为准。状态依据仓库发布记录与本机发布物只读核对整理（2026-11-05），不是本次重新进行的公网/数据库验收。源码编辑不等于部署；本次文档及好友视频奖励源码同步退役未触发新部署。
+本页统一客户端入口和环境状态；字段边界、响应、错误与幂等以链接的详细契约为准。状态依据仓库发布记录与本机发布物核对整理（2026-11-05）；其中分享助力已于当日 14:09（北京时间）完成测试服发布，并于 17:15 完成正式服发布后回读、57 项公网合成会话验收及数据/权限核验。其他功能状态不代表本次重新验收；源码或文档编辑本身不等于部署。
 
 ## 1. 环境与认证
 
@@ -13,6 +13,7 @@
 | 逐次成功登录 scene 事件 | 已部署，见[正式发布记录](login-events.md) | 当前本地发布物未含该采集；不将正式状态外推测试 |
 | 玩家自身视频完成统计 | 已部署 | 已部署（随 2026-10-19 排行榜发布） |
 | 好友昨日视频奖励 | 已退役，领取 404，列表无奖励字段 | 已退役，领取 404，列表无奖励字段 |
+| `diapig_invite` 分享助力 | 已部署，2026-11-05 17:15 北京时间公网验收及回读通过 | 已部署，2026-11-05 14:09 北京时间公网验收通过 |
 
 - 微信后台 request 合法域名：`https://sub2api.wdaveh5game.com`，不带路径；微信 AppSecret 只在服务端。
 - 除微信登录外，下表游戏接口均需本环境 `Authorization: Bearer <accessToken>`，不是微信服务端 access_token，也不是 JWT。身份/应用来自会话与服务端配置，不接受 appId/gameId/openid/userId 覆盖。
@@ -34,6 +35,8 @@
 | `/invites/report` | 是 | `{inviterUid}` | 首次会话绑定邀请人，不要求关卡/留存；[普通邀请](invite-api.md) |
 | `/invites/list` | 是 | `{cursor?, limit?}` | 未领优先、游标分页、累计 summary；无 serverDate/videoRewardDate/yesterdayVideoReward；[列表](invite-api.md) |
 | `/invites/claim` | 是 | `{inviteeUid}` | 普通拉新领取标记、稳定 claimId；每邀请人北京时间每日最多新领 50，重领不占额度；[领取](invite-api.md) |
+| `/share-assists/report` | 是 | `{shareId, inviterUid}` | **正式服与测试服均已部署**；固定 diapig_invite，新老用户每日去重助力；[分享助力](share-assists-api.md) |
+| `/share-assists/summary` | 是 | `{shareId}` | **正式服与测试服均已部署**；本人今日助力人数与北京午夜 resetAt；[分享助力](share-assists-api.md) |
 | `/data/get` | 是 | `{}` | 原始 JSON 字符串与 CAS version；[存档](save-api.md) |
 | `/data/save` | 是 | `{version, data}` | data 为原始 JSON **字符串**，CAS 冲突 409，不自动重试；[存档](save-api.md) |
 | `/analytics/rewarded-video/completed` | 是 | `{eventId, placement, clientInfo?}` | 本人完整观看完成事件幂等统计，不发奖；[视频统计](rewarded-video-api.md) |

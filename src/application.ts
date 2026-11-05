@@ -21,6 +21,8 @@ import {SubscriptionsController} from './subscriptions/subscriptions.controller.
 import {SubscriptionsService} from './subscriptions/subscriptions.service.js';
 import { LeaderboardsController } from './leaderboards/leaderboards.controller.js';
 import { LeaderboardsService } from './leaderboards/leaderboards.service.js';
+import { ShareAssistsController } from './share-assists/share-assists.controller.js';
+import { ShareAssistsService } from './share-assists/share-assists.service.js';
 
 @Catch()
 class SafeExceptionFilter implements ExceptionFilter {
@@ -50,7 +52,7 @@ export async function createApplication(config: AppConfig, overrides: { wechat?:
   try {
     const app = await NestFactory.create<NestExpressApplication>({
       module: AppModule,
-      controllers: [AuthController, DataController, InvitesController, ProfileController, RewardedVideoController, LeaderboardsController, ...(config.subscribeMessagesEnabled ? [SubscriptionsController] : [])],
+      controllers: [AuthController, DataController, InvitesController, ProfileController, RewardedVideoController, LeaderboardsController, ShareAssistsController, ...(config.subscribeMessagesEnabled ? [SubscriptionsController] : [])],
       providers: [
         { provide: Infrastructure, useValue: infrastructure },
         { provide: CONFIG, useValue: config },
@@ -59,6 +61,7 @@ export async function createApplication(config: AppConfig, overrides: { wechat?:
         { provide: LeaderboardsService, useValue: new LeaderboardsService(config, infrastructure) },
         { provide: DataService, useValue: new DataService(config, infrastructure) },
         { provide: RewardedVideoService, useValue: new RewardedVideoService(config, infrastructure) },
+        { provide: ShareAssistsService, useValue: new ShareAssistsService(config, infrastructure) },
         { provide: InvitesService, useValue: new InvitesService(config, infrastructure) },
         { provide: AuthService, useValue: new AuthService(config, infrastructure, overrides.wechat ?? new WechatClient(config)) },
       ],

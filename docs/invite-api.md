@@ -1,5 +1,7 @@
 # 小游戏邀请拉新接口
 
+独立分享点 `diapig_invite` 的新老用户每日助力见[分享助力接口](share-assists-api.md)（正式服与测试服均已部署；正式服于 2026-11-05 17:15 北京时间完成公网验收及回读），不使用本页拉新上报；本页普通邀请规则不变。
+
 **发布状态：2026-10-17 已部署正式环境及测试环境。** 正式使用 `https://sub2api.wdaveh5game.com/h5login/api`；测试使用 `https://sub2api.wdaveh5game.com/h5login-test/api`，见 [`staging-integration.md`](staging-integration.md)。两环境UID、token和缓存不得混用。
 
 ## 1. 已确认规则
