@@ -1,7 +1,7 @@
 .env
 .env.*
 !.env.example
-node_modules/
+node_modules
 dist/
 # Immutable runtime rollback artifacts; never publish compiled releases or backups.
 .dist-retired-*/

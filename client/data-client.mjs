@@ -1,8 +1,18 @@
 // HTTPS protects transport; the server authenticates this opaque Bearer token.
-export function createDataClient({ wx, accessToken, baseUrl = 'https://sub2api.wdaveh5game.com/h5login' }) {
-  if (typeof accessToken !== 'string' || !/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/.test(accessToken) ||
-      !wx || typeof wx.request !== 'function' || typeof baseUrl !== 'string' ||
-      !/^https:\/\/[a-z0-9.-]+(?::\d+)?\/h5login(?:-test)?$/i.test(baseUrl)) {
+export function createDataClient(options) {
+  if (!options || typeof options !== 'object' || Array.isArray(options)) {
+    throw new Error('INVALID_CLIENT_OPTIONS');
+  }
+  const { wx, accessToken, appId, baseUrl = 'https://sub2api.wdaveh5game.com/h5login' } = options;
+  // A literal allowlist avoids URL normalization and needs no URL/Node globals.
+  const base = typeof baseUrl === 'string' && !/\s/.test(baseUrl) &&
+    /^https:\/\/[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*(?::([1-9][0-9]{0,4}))?\/(h5login(?:-test)?|minigame)$/i.exec(baseUrl);
+  const platform = !!base && base[2] === 'minigame';
+  if (typeof accessToken !== 'string' || accessToken.length !== 43 || !/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/.test(accessToken) ||
+      !wx || typeof wx.request !== 'function' || !base || (base[1] && Number(base[1]) > 65535) ||
+      (base[2].toLowerCase() === 'minigame' && !platform) ||
+      (platform && (typeof appId !== 'string' || appId.length !== 18 || !/^wx[0-9a-f]{16}$/.test(appId) ||
+        Object.keys(options).some(key => !['wx', 'accessToken', 'appId', 'baseUrl'].includes(key))))) {
     throw new Error('INVALID_CLIENT_OPTIONS');
   }
 
@@ -11,7 +21,10 @@ export function createDataClient({ wx, accessToken, baseUrl = 'https://sub2api.w
       wx.request({
         url: baseUrl + '/api/data/' + operation,
         method: 'POST',
-        header: { 'content-type': 'application/json', Authorization: 'Bearer ' + accessToken },
+        header: {
+          'content-type': 'application/json', Authorization: 'Bearer ' + accessToken,
+          ...(platform ? { 'X-Minigame-AppId': appId } : {})
+        },
         data: payload,
         timeout: 20000,
         success(res) {

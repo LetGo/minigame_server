@@ -1,0 +1,26 @@
+[Unit]
+Description=Minigame multi-game API
+Requires=minigame-cat-sudoku-infrastructure.service
+After=network-online.target minigame-cat-sudoku-infrastructure.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/.hermes/workspace/projects/minigame_platform/runtime/current
+ExecStart=/usr/bin/node /home/ubuntu/.hermes/workspace/projects/minigame_platform/runtime/current/dist/platform-main.js
+Environment=NODE_ENV=production
+Environment=MINIGAME_REGISTRY_FILE=/home/ubuntu/.hermes/workspace/projects/minigame_platform/.registry.json
+Environment=MINIGAME_PORT=18744
+Environment=MINIGAME_HOST=127.0.0.1
+Restart=on-failure
+RestartSec=3
+TimeoutStartSec=30
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
