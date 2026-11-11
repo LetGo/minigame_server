@@ -28,6 +28,14 @@ test('login log date is optional, calendar-valid and forwarded without changing 
  for(const date of [null,'','2026-02-29','2026-04-31','2026-13-01','2026-00-01','2026-10-00','2026-1-01','0000-01-01','2026-10-19T00:00:00Z','2026-10-19\' OR true--',20261019,[],{}])await f.post({date}).expect(400).then(r=>assert.equal(r.body.message,'INVALID_REQUEST'));
  assert.equal(calls.length,3,'invalid dates never reach the query');
 });
+test('login logs accept an optional exact openid and reject invalid identities before querying',async t=>{
+ const calls=[];const f=await fixture(t,async(_pool,_app,offset,date,openid)=>{calls.push({offset,date,openid});return {offset,date,openid,items:[]};});
+ await f.post({offset:50,date:'2026-11-06',openid:'oPlayer_exact-1'}).expect(200).then(r=>assert.equal(r.body.openid,'oPlayer_exact-1'));
+ await f.post({}).expect(200);
+ assert.deepEqual(calls,[{offset:50,date:'2026-11-06',openid:'oPlayer_exact-1'},{offset:0,date:null,openid:null}]);
+ for(const openid of ['',null,123,[],{},'a'.repeat(129),' abc','abc ','abc%','abc\' OR true--','<script>'])await f.post({openid}).expect(400).then(r=>assert.equal(r.body.message,'INVALID_OPENID'));
+ assert.equal(calls.length,2);
+});
 test('login log storage errors fail closed without leaking private details',async t=>{
  const f=await fixture(t,async()=>{throw Error('private database password');});const r=await f.post({offset:0}).expect(503);assert.equal(r.body.message,'DASHBOARD_UNAVAILABLE');assert(!r.text.includes('private'));f.redis.get=async()=>{throw Error('private redis');};await f.post({offset:0}).expect(503).then(r=>assert(!r.text.includes('private')));
 });
@@ -47,7 +55,7 @@ test('login log query reads each successful login event with its own scene and a
  assert.match(captured.sql,/e\.app_id=\$1/);
  assert.doesNotMatch(captured.sql,/\bDISTINCT\b/i);
  assert.doesNotMatch(captured.sql,/'eventId'/,'internal bigint event ids are not exposed to the page');
- assert.deepEqual(captured.args,[config.appId,0,null]);
+ assert.deepEqual(captured.args,[config.appId,0,null,null]);
 });
 // Historical coverage: a daily row is only an extra compatibility row when NO event carries that exact
 // first_login_at; otherwise the per-login event already represents the same login.
@@ -60,7 +68,7 @@ test('legacy daily rows remain only when no event matches their exact first logi
  assert.match(captured.sql,/NULL::int AS scene/);
  assert.match(captured.sql,/l\.activity_date=s\.selected_date/);
  assert.match(captured.sql,/u\.first_login_completed/);
- assert.deepEqual(captured.args,[config.appId,0,'2026-10-19']);
+ assert.deepEqual(captured.args,[config.appId,0,'2026-10-19',null]);
 });
 // One union feeds the page, the total and hasMore; ordering is login time DESC, then uid, then the
 // event id so repeated identical timestamps paginate deterministically.

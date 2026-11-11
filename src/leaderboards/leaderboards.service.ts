@@ -23,7 +23,17 @@ if redis.call('GET',KEYS[2]) ~= ARGV[2] or redis.call('ZSCORE',KEYS[1],'__ready_
 local top=redis.call('ZRANGE',KEYS[1],0,29,'REV','WITHSCORES')
 local rank=redis.call('ZREVRANK',KEYS[1],ARGV[1])
 local score=redis.call('ZSCORE',KEYS[1],ARGV[1])
-return {top,rank and rank+1 or -1,score or '-1'}
+return {top,rank and rank+1 or -1,score or '-1',0}
+`;
+
+const READ_NEARBY=`
+if redis.call('GET',KEYS[2]) ~= ARGV[2] or redis.call('ZSCORE',KEYS[1],'__ready__') ~= '-1' then return {} end
+local rank=redis.call('ZREVRANK',KEYS[1],ARGV[1])
+local score=redis.call('ZSCORE',KEYS[1],ARGV[1])
+if not rank then return {{},-1,score or '-1',0} end
+local start=math.max(0,rank-5)
+local nearby=redis.call('ZRANGE',KEYS[1],start,rank+5,'REV','WITHSCORES')
+return {nearby,rank+1,score or '-1',start}
 `;
 
 export class LeaderboardsService {
@@ -148,13 +158,16 @@ export class LeaderboardsService {
   await this.infrastructure.pool.query('UPDATE game_leaderboard_scores SET dirty=false WHERE app_id=$1 AND board_type=$2 AND user_id=$3 AND value=$4 AND dirty',[this.config.appId,type,userId,value]);
   return {value:Number(result[0]),rank:Number(result[1])<0?null:Number(result[1])};
  }
- async list(request:Request){return this.storage(async()=>{
+ async list(request:Request){return this.read(request,READ);}
+ async nearby(request:Request){return this.read(request,READ_NEARBY);}
+ private async read(request:Request,script:string){return this.storage(async()=>{
+  // Both query modes share the existing per-player list quota.
   const userId=await this.session(request,'list'),{type}=this.body(request,false);
-  let snapshot=await this.redis().eval(READ,{keys:[this.key(type),this.epochKey(type)],arguments:[userId,await this.indexEpoch(type)]}) as unknown as [string[],number,string]|[];
-  if(snapshot.length===0){await this.ensureReady(type);snapshot=await this.redis().eval(READ,{keys:[this.key(type),this.epochKey(type)],arguments:[userId,await this.indexEpoch(type)]}) as unknown as [string[],number,string]|[];}
+  let snapshot=await this.redis().eval(script,{keys:[this.key(type),this.epochKey(type)],arguments:[userId,await this.indexEpoch(type)]}) as unknown as [string[],number,string,number]|[];
+  if(snapshot.length===0){await this.ensureReady(type);snapshot=await this.redis().eval(script,{keys:[this.key(type),this.epochKey(type)],arguments:[userId,await this.indexEpoch(type)]}) as unknown as [string[],number,string,number]|[];}
   if(snapshot.length===0)throw new ServiceUnavailableException('LEADERBOARD_REBUILDING');
-  const [top,rank,score]=snapshot,entries:Array<{userId:string;rank:number;value:number}>=[];
-  for(let i=0;i<top.length;i+=2){if(top[i]!==READY)entries.push({userId:top[i]!,rank:entries.length+1,value:Number(top[i+1])});}
+  const [top,rank,score,start]=snapshot,entries:Array<{userId:string;rank:number;value:number}>=[];
+  for(let i=0;i<top.length;i+=2){if(top[i]!==READY)entries.push({userId:top[i]!,rank:start+entries.length+1,value:Number(top[i+1])});}
   const ids=[...new Set([userId,...entries.map(r=>r.userId)])];
   const profiles=await this.infrastructure.pool.query<{id:string;nickname:string|null;avatar_url:string|null;stored_value:number|null}>('SELECT u.id,p.nickname,p.avatar_url,s.value AS stored_value FROM game_users u LEFT JOIN game_profiles p ON p.user_id=u.id LEFT JOIN game_leaderboard_scores s ON s.app_id=u.app_id AND s.user_id=u.id AND s.board_type=$3 AND u.id=$4 WHERE u.app_id=$1 AND u.id=ANY($2::uuid[])',[this.config.appId,ids,type,userId]);
   const byId=new Map(profiles.rows.map(p=>[p.id,{nickname:p.nickname??'游客',avatarUrl:p.avatar_url??''}]));

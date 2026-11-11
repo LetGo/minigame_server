@@ -17,14 +17,14 @@ test('overview marks only Saturday and Sunday rows in its Beijing-date 14-day tr
  const data={today:'2026-10-25',coverageStart:'2026-10-17',metrics:{dau:2,newUsers:4,invitedNewUsers:1,totalUsers:60,todayRewardedVideos:6,d1:{cohortSize:4,returned:2,rate:.5}},history};
  const before=JSON.stringify(data);render(data);
  const table=view.children.find(e=>e.className==='history-table-container').children[0],rows=table.children[1].children;
- assert.equal(rows.length,14);assert.equal(table.children[0].children[0].children.length,7);
+ assert.equal(rows.length,14);assert.equal(table.children[0].children[0].children.length,8);
  assert.deepEqual(rows.filter(r=>r.className==='history-weekend').map(r=>r.children[0].textContent),['2026-10-25（周日）（截至现在）','2026-10-24（周六）','2026-10-18（周日）','2026-10-17（周六）']);
  assert.deepEqual(rows.map(r=>r.children[0].textContent.slice(0,10)),[...dates].reverse());
  for(const row of rows){
   const date=row.children[0].textContent.slice(0,10),weekend=['2026-10-17','2026-10-18','2026-10-24','2026-10-25'].includes(date);
   assert.equal(row.className==='history-weekend',weekend);
   if(!weekend)assert.equal(row.children[0].textContent,date,'weekday dates stay unchanged');
-  assert.equal(row.children.length,7);assert.equal(row.children[1].textContent,'4');assert.equal(row.children[2].textContent,'1（25.00%）');assert.equal(row.children[3].textContent,'2');assert.equal(row.children[6].textContent,'6（人均 3.00 次）');
+  assert.equal(row.children.length,8);assert.equal(row.children[1].textContent,'4');assert.equal(row.children[2].textContent,'1（25.00%）');assert.equal(row.children[3].textContent,'2');assert.equal(row.children[6].textContent,'6（人均 3.00 次）');
  }
  assert.equal(rows[0].children[4].textContent,'待次日统计');assert.equal(rows[0].children[5].textContent,'待次日统计');assert.equal(rows[1].children[4].textContent,'50.00%（实时）');
  assert.equal(view.children[0].children.length,6);assert.equal(JSON.stringify(data),before);

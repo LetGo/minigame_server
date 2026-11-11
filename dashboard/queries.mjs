@@ -31,6 +31,14 @@ export async function overview(pool, appId) {
         (SELECT count(*)::float8 FROM game_rewarded_video_events e WHERE e.app_id=$1
           AND e.recorded_at>=d::timestamp AT TIME ZONE 'Asia/Shanghai'
           AND e.recorded_at<(d+1)::timestamp AT TIME ZONE 'Asia/Shanghai') AS rewarded_videos,
+        (SELECT count(*)::float8 FROM game_users u JOIN game_rewarded_video_events e
+          ON e.app_id=u.app_id AND e.user_id=u.id
+          WHERE u.app_id=$1 AND u.first_login_completed
+            AND u.created_at>=d::timestamp AT TIME ZONE 'Asia/Shanghai'
+            AND u.created_at<(d+1)::timestamp AT TIME ZONE 'Asia/Shanghai'
+            AND e.recorded_at>=d::timestamp AT TIME ZONE 'Asia/Shanghai'
+            AND e.recorded_at<(d+1)::timestamp AT TIME ZONE 'Asia/Shanghai'
+            AND e.recorded_at>=u.created_at) AS registered_user_videos,
         (SELECT count(*)::int FROM game_users u WHERE u.app_id=$1 AND u.first_login_completed
           AND u.created_at>=d::timestamp AT TIME ZONE 'Asia/Shanghai'
           AND u.created_at<(d+1)::timestamp AT TIME ZONE 'Asia/Shanghai') AS new_users,
@@ -76,7 +84,7 @@ export async function overview(pool, appId) {
         'todayRewardedVideos',(SELECT count(*)::int FROM game_rewarded_video_events e WHERE e.app_id=$1
           AND e.recorded_at>=b.day_start AND e.recorded_at<=b.cutoff_at)),
       'history',(SELECT json_agg(json_build_object('date',h.d::text,'newUsers',h.new_users,'dau',h.dau,
-          'invitedNewUsers',h.invited_new_users,'rewardedVideos',h.rewarded_videos,'retentionDate',(h.d+1)::text,'d1Pending',h.d=s.today,
+          'invitedNewUsers',h.invited_new_users,'rewardedVideos',h.rewarded_videos,'registeredUserVideos',h.registered_user_videos,'retentionDate',(h.d+1)::text,'d1Pending',h.d=s.today,
           'cohortSize',h.new_users,'returned',next_day.returned,
           'd1Rate',next_day.returned::float8/nullif(h.new_users,0)) ORDER BY h.d)
         FROM daily h LEFT JOIN daily next_day ON next_day.d=h.d+1)
@@ -144,7 +152,7 @@ export async function player(pool, appId, identifier, lookupType = 'openid') {
 // coverage with no fabricated scene. total/pagination/date filter all run on the union.
 // Ordering: login time DESC, then uid DESC, then event id DESC so identical timestamps are stable.
 // Event ids are internal (bigint) and never returned to the page.
-export async function loginLogs(pool, appId, offset = 0, date = null) {
+export async function loginLogs(pool, appId, offset = 0, date = null, openid = null) {
   const { rows } = await pool.query(`
     WITH moment AS MATERIALIZED (SELECT clock_timestamp() AS at),
     settings AS (
@@ -160,6 +168,7 @@ export async function loginLogs(pool, appId, offset = 0, date = null) {
       JOIN game_users u ON u.app_id=e.app_id AND u.id=e.user_id
       LEFT JOIN game_profiles p ON p.user_id=u.id
       WHERE e.app_id=$1 AND e.login_at>=b.day_start AND e.login_at<b.day_end AND u.first_login_completed
+        AND ($4::text IS NULL OR u.open_id=$4::text)
     ), legacy AS MATERIALIZED (
       SELECT l.user_id, l.first_login_at AS login_at, NULL::bigint AS event_id, NULL::int AS scene,
         u.open_id, p.nickname, u.source_scene, u.created_at, u.last_client_version
@@ -168,6 +177,7 @@ export async function loginLogs(pool, appId, offset = 0, date = null) {
       LEFT JOIN game_profiles p ON p.user_id=u.id
       CROSS JOIN settings s
       WHERE l.app_id=$1 AND l.activity_date=s.selected_date AND u.first_login_completed
+        AND ($4::text IS NULL OR u.open_id=$4::text)
         AND NOT EXISTS (SELECT 1 FROM game_login_events e
           WHERE e.app_id=l.app_id AND e.user_id=l.user_id AND e.login_at=l.first_login_at)
     ), matching AS MATERIALIZED (SELECT * FROM events UNION ALL SELECT * FROM legacy),
@@ -177,13 +187,49 @@ export async function loginLogs(pool, appId, offset = 0, date = null) {
       LIMIT 50 OFFSET $2::int
     ) SELECT json_build_object(
       'today',s.today::text,'date',s.selected_date::text,'timezone','Asia/Shanghai','generatedAt',s.generated_at,
-      'total',t.total,'offset',$2::int,'limit',50,'hasMore',($2::int+50)<t.total,
+      'openid',$4::text,'total',t.total,'offset',$2::int,'limit',50,'hasMore',($2::int+50)<t.total,
       'items',coalesce((SELECT json_agg(json_build_object(
         'loginAt',login_at,'openid',open_id,'nickname',nickname,'sourceScene',source_scene,'loginScene',scene,
         'registeredAt',created_at,'clientVersion',last_client_version
       ) ORDER BY login_at DESC,user_id DESC,event_id DESC NULLS LAST) FROM page),'[]'::json)
-    ) AS result FROM settings s CROSS JOIN totals t`, [appId, offset, date]);
+    ) AS result FROM settings s CROSS JOIN totals t`, [appId, offset, date, openid]);
   if (!rows[0]?.result) throw new Error('Login records unavailable');
+  return rows[0].result;
+}
+
+// One row per stored, deduplicated completion report, not an ad-platform verification or reward.
+// recorded_at is the server insertion time. Profiles are current and may be absent.
+// This table has no numeric id: its PK is (app_id,user_id,event_id), event_id is UUID.
+// Use both UUID keys after recorded_at for a stable total order, including cross-user event-id ties.
+export async function videoLogs(pool, appId, offset = 0, date = null, openid = null, placement = null) {
+  const { rows } = await pool.query(`
+    WITH moment AS MATERIALIZED (SELECT clock_timestamp() AS at),
+    settings AS (
+      SELECT at AS generated_at,(at AT TIME ZONE 'Asia/Shanghai')::date AS today,
+        coalesce($3::date,(at AT TIME ZONE 'Asia/Shanghai')::date) AS selected_date FROM moment
+    ), bounds AS (
+      SELECT selected_date::timestamp AT TIME ZONE 'Asia/Shanghai' AS day_start,
+        (selected_date+1)::timestamp AT TIME ZONE 'Asia/Shanghai' AS day_end FROM settings
+    ), matching AS MATERIALIZED (
+      SELECT e.recorded_at,e.event_id,e.user_id,u.open_id,p.nickname,e.placement
+      FROM game_rewarded_video_events e CROSS JOIN bounds b
+      JOIN game_users u ON u.app_id=e.app_id AND u.id=e.user_id
+      LEFT JOIN game_profiles p ON p.user_id=u.id
+      WHERE e.app_id=$1 AND e.recorded_at>=b.day_start AND e.recorded_at<b.day_end
+        AND u.first_login_completed AND ($4::text IS NULL OR u.open_id=$4::text)
+        AND ($5::text IS NULL OR e.placement=$5::text)
+    ), totals AS (SELECT count(*)::float8 AS total FROM matching),
+    page AS (
+      SELECT * FROM matching ORDER BY recorded_at DESC,event_id DESC,user_id DESC
+      LIMIT 50 OFFSET $2::int
+    ) SELECT json_build_object(
+      'today',s.today::text,'date',s.selected_date::text,'timezone','Asia/Shanghai','generatedAt',s.generated_at,
+      'openid',$4::text,'placement',$5::text,'total',t.total,'offset',$2::int,'limit',50,'hasMore',($2::int+50)<t.total,
+      'items',coalesce((SELECT json_agg(json_build_object(
+        'recordedAt',recorded_at,'openid',open_id,'nickname',nickname,'placement',placement
+      ) ORDER BY recorded_at DESC,event_id DESC,user_id DESC) FROM page),'[]'::json)
+    ) AS result FROM settings s CROSS JOIN totals t`, [appId, offset, date, openid, placement]);
+  if (!rows[0]?.result) throw new Error('Video records unavailable');
   return rows[0].result;
 }
 

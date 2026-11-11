@@ -8,4 +8,6 @@ export class LeaderboardsController {
  report(@Req() request:Request){return this.boards.report(request);}
  @Post('list') @HttpCode(200) @Header('Cache-Control','no-store')
  list(@Req() request:Request){return this.boards.list(request);}
+ @Post('nearby') @HttpCode(200) @Header('Cache-Control','no-store')
+ nearby(@Req() request:Request){return this.boards.nearby(request);}
 }

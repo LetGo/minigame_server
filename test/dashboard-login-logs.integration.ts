@@ -133,5 +133,20 @@ test('per-login events keep their own scene, legacy rows fill only unrecorded fi
  assert.equal((await get(0,'2000-01-01')).body.total,0);
  assert.equal((await pool.query('SHOW default_transaction_read_only')).rows[0].default_transaction_read_only,'on');
  await assert.rejects(()=>pool.query("INSERT INTO game_login_events(app_id,user_id,login_at,scene) VALUES($1,$2,clock_timestamp(),1001)",[appId,multi]),'the dashboard role cannot write login events');
+ const filtered=(openid:string,offset=0,date=today)=>api.post('/h5dashboard/api/login-logs').set('Origin',config.origin).set('Cookie',cookie).send({openid,offset,date}).expect(200);
+ for(const openid of ['multi','legacy','dupe','bounds','absent','incomplete','foreign','MULTI']){
+  const result=(await filtered(openid)).body;
+  assert.equal(result.openid,openid);assert.equal(result.total,rowsFor(openid).length);
+  assert.deepEqual(result.items.map(strip),rowsFor(openid).map(strip));assert.equal(result.hasMore,false);
+ }
+ assert.equal((await filtered('bounds',0,yesterday)).body.items[0].loginScene,1002);
+ const foreignMulti=await addUser(foreignApp,'multi');await addEvent(foreignApp,foreignMulti,midnight+11*minute,1001);
+ const prefix=await addUser(appId,'multi-extra');await addEvent(appId,prefix,midnight+11*minute,1001);
+ for(let n=0;n<55;n++)await addEvent(appId,multi,midnight+(12+n)*minute,1001);
+ const filteredFirst=(await filtered('multi')).body,filteredNext=(await filtered('multi',50)).body;
+ assert.equal(filteredFirst.total,58);assert.equal(filteredFirst.items.length,50);assert.equal(filteredFirst.hasMore,true);
+ assert.equal(filteredNext.total,58);assert.equal(filteredNext.items.length,8);assert.equal(filteredNext.hasMore,false);
+ assert([...filteredFirst.items,...filteredNext.items].every((x:any)=>x.openid==='multi'),'openid equality excludes prefixes and foreign apps');
+ assert.deepEqual((await filtered('multi',100)).body.items,[]);
  await api.post('/h5dashboard/api/logout').set('Origin',config.origin).set('Cookie',cookie).send({}).expect(200);await api.post('/h5dashboard/api/login-logs').set('Origin',config.origin).set('Cookie',cookie).send({offset:0}).expect(401);
 });

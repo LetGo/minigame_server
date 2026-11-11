@@ -20,7 +20,7 @@ test('trend videos append two-decimal average using each row daily active users,
  const original=JSON.stringify(data);h.render(data);
  assert.deepEqual(h.rows().map(r=>r[6]),['12（人均 3.00 次）','10（人均 3.33 次）','0（人均 0.00 次）','0（人均 — 次）','12（人均 — 次）','12（人均 — 次）','—（人均 — 次）','—（人均 — 次）','12（人均 — 次）']);
  assert.equal(JSON.stringify(data),original,'do not mutate API data');
- assert.equal(h.rows()[0].length,7,'no extra trend columns');
+ assert.equal(h.rows()[0].length,8,'registration videos is the only added trend column');
  assert.equal(h.view.children[0].children.length,6,'keep six overview cards');
  assert.doesNotMatch(h.view.textContent,/NaN|Infinity/);
  assert.match(h.view.textContent,/人均次数.*当日激励视频次数.*当日登录活跃/);

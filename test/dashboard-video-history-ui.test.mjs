@@ -15,7 +15,7 @@ test('14-day trend renders per-day reported rewarded videos with zero and unavai
  ].map(r=>({newUsers:1,invitedNewUsers:0,dau:1,cohortSize:1,returned:0,d1Rate:0,...r}))};
  render(data);
  const table=view.children.find(e=>e.className==='history-table-container').children[0];
- assert.deepEqual(table.children[0].children[0].children.map(c=>c.textContent),['北京时间日期','新注册','其中邀请注册','登录活跃','次日留存','次日回访 / 当日新增','激励视频次数']);
+ assert.deepEqual(table.children[0].children[0].children.map(c=>c.textContent),['北京时间日期','新注册','其中邀请注册','登录活跃','次日留存','次日回访 / 当日新增','激励视频次数','注册用户视频数']);
  const rows=table.children[1].children.map(r=>r.children.map(c=>c.textContent));
  assert.deepEqual(rows.map(r=>r[6]),['12（人均 12.00 次）','7（人均 7.00 次）','0（人均 0.00 次）','—（人均 — 次）','—（人均 — 次）']);
  assert.equal(rows[0][0],'2026-10-20（截至现在）');assert.equal(rows[0][4],'待次日统计');

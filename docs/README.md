@@ -42,6 +42,7 @@
 | `/analytics/rewarded-video/completed` | 是 | `{eventId, placement, clientInfo?}` | 本人完整观看完成事件幂等统计，不发奖；[视频统计](rewarded-video-api.md) |
 | `/leaderboards/report` | 是 | `{type, value}` | stage/boss 历史最高值、rank、improved；未达门槛仍保存；[排行榜](leaderboards-api.md) |
 | `/leaderboards/list` | 是 | `{type}` | 前 30 + 始终返回 self；[排行榜](leaderboards-api.md) |
+| `/leaderboards/nearby` | 是 | `{type}` | **正式服、测试服均已部署**：本人前后各 5 位，最多 11 项＋self；[附近排名](leaderboards-nearby-api.md) |
 | `/subscriptions/checkin/template` | 是 | `{}` | 固定一次性订阅模板配置；[订阅提醒](subscribe-message-api.md) |
 | `/subscriptions/checkin/report` | 是 | `{eventId, templateId, status}` | 记录微信回调观察值，非新增发送授权；[订阅提醒](subscribe-message-api.md) |
 
