@@ -3,6 +3,8 @@ import { IsInt, IsString, Length, Matches, Max, Min, ValidateIf } from 'class-va
 import { AuthService } from './auth.service.js';
 import { LoginRateGuard } from './login-rate.guard.js';
 
+import { CLIENT_INSTANCE_PATTERN } from './client-instance.js';
+
 export const CLIENT_VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._+\-]{0,63}$/;
 
 class WechatLoginDto {
@@ -23,7 +25,8 @@ class WechatLoginDto {
   // 本地实例标识可省略以兼容旧客户端；显式无效值必须拒绝。
   @ValidateIf((body: WechatLoginDto) => body.clientInstanceId !== undefined)
   @IsString()
-  @Matches(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
+  @Length(36, 159)
+  @Matches(CLIENT_INSTANCE_PATTERN)
   clientInstanceId?: string;
 
   // Optional first-registration launch scene. Omitted means "no report"; an explicit

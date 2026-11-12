@@ -1,3 +1,4 @@
+import { CLIENT_INSTANCE_PATTERN } from '../auth/client-instance.js';
 import {createHash} from 'node:crypto';
 import {BadRequestException,ConflictException,HttpException,ServiceUnavailableException,UnauthorizedException} from '@nestjs/common';
 import {Request} from 'express';
@@ -27,7 +28,7 @@ export class RewardedVideoService {
   )) as [number,number];
   if(rate[0]>60){request.res?.setHeader('Retry-After',String(Math.max(1,rate[1])));throw new HttpException('REWARDED_VIDEO_RATE_LIMITED',429);}
   // 身份字段只取自服务端会话；旧会话保留未知值。
-  return {userId,clientInstanceId:typeof session.clientInstanceId==='string'&&UUID.test(session.clientInstanceId)?session.clientInstanceId:null,sessionId:typeof session.sessionId==='string'&&UUID.test(session.sessionId)?session.sessionId:null};
+  return {userId,clientInstanceId:typeof session.clientInstanceId==='string'&&CLIENT_INSTANCE_PATTERN.test(session.clientInstanceId)?session.clientInstanceId:null,sessionId:typeof session.sessionId==='string'&&UUID.test(session.sessionId)?session.sessionId:null};
  }
  private validate(placement:string,info:unknown):string {
   const invalid=():never=>{throw new BadRequestException('INVALID_REWARDED_VIDEO_REQUEST');};

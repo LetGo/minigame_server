@@ -37,7 +37,7 @@ test('compiled rewarded-video completion HTTP records authenticated player event
  assert.deepEqual(Object.keys(first).sort(),['alreadyRecorded','eventId','placement','recordedAt','userId']);assert.equal(first.alreadyRecorded,false);assert.equal(first.eventId,payload.eventId);assert.equal(first.userId,a.user.id);assert.equal(first.placement,'revive');assert(Date.parse(first.recordedAt)>=before-1000&&Date.parse(first.recordedAt)<=Date.now()+1000);
  const row=(await owner.query('SELECT * FROM game_rewarded_video_events WHERE app_id=$1 AND user_id=$2 AND event_id=$3',[appId,a.user.id,payload.eventId])).rows[0];assert.deepEqual(row.client_info,payload.clientInfo);assert.equal(row.recorded_at.toISOString(),first.recordedAt);
  await t.test('不同实例登录、广告事件关联与跨会话重试保留首次归属',async()=>{
-  const instanceA=randomUUID(),instanceB=randomUUID(),code='identity_'+role;
+  const instanceA=randomUUID()+'_ios_apple_iphone15,2',instanceB=randomUUID()+'_android_xiaomi_23049rad8c',code='identity_'+role;
   const a=await login(code,instanceA),b=await login(code,instanceB);
   const events=(await owner.query('SELECT client_instance_id,session_id FROM game_login_events WHERE app_id=$1 AND user_id=$2 ORDER BY login_at',[appId,a.user.id])).rows;
   assert.equal(events.length,2);assert.equal(events[0].client_instance_id,instanceA);assert.equal(events[1].client_instance_id,instanceB);
@@ -48,6 +48,7 @@ test('compiled rewarded-video completion HTTP records authenticated player event
   assert.equal(row.client_instance_id,instanceA);assert.equal(row.session_id,events[0].session_id);
   await call('auth/wechat-login',{code,clientInstanceId:'bad'},undefined,400);
   await call('auth/wechat-login',{code,clientInstanceId:null},undefined,400);
+  for (const tail of ['_ios_apple', '_ios_apple_bad\n', '_ios_apple_'+ 'x'.repeat(41), '_ios_apple_<script>']) await call('auth/wechat-login',{code,clientInstanceId:randomUUID()+tail},undefined,400);
  });
  await t.test('same completed event retries are idempotent and changed payload is rejected',async()=>{
   assert.deepEqual((await call(path,payload,a.accessToken)).data,{...first,alreadyRecorded:true});

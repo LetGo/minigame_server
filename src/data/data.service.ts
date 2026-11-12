@@ -1,3 +1,4 @@
+import { CLIENT_INSTANCE_PATTERN } from '../auth/client-instance.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException, HttpException, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { Request } from 'express';
@@ -32,7 +33,7 @@ export class DataService {
     if (Object.keys(request.query).length) throw new BadRequestException('INVALID_DATA_REQUEST');
     const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     return { userId: session.userId,
-      clientInstanceId: typeof session.clientInstanceId === 'string' && uuid.test(session.clientInstanceId) ? session.clientInstanceId : null,
+      clientInstanceId: typeof session.clientInstanceId === 'string' && CLIENT_INSTANCE_PATTERN.test(session.clientInstanceId) ? session.clientInstanceId : null,
       sessionId: typeof session.sessionId === 'string' && uuid.test(session.sessionId) ? session.sessionId : null,
       payload: request.body as unknown };
   }

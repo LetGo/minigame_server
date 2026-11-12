@@ -170,7 +170,7 @@ export async function loginLogs(pool, appId, offset = 0, date = null, openid = n
       WHERE e.app_id=$1 AND e.login_at>=b.day_start AND e.login_at<b.day_end AND u.first_login_completed
         AND ($4::text IS NULL OR u.open_id=$4::text)
     ), legacy AS MATERIALIZED (
-      SELECT l.user_id, l.first_login_at AS login_at, NULL::bigint AS event_id, NULL::int AS scene, NULL::uuid AS client_instance_id, NULL::uuid AS session_id, NULL::varchar AS client_version,
+      SELECT l.user_id, l.first_login_at AS login_at, NULL::bigint AS event_id, NULL::int AS scene, NULL::varchar AS client_instance_id, NULL::uuid AS session_id, NULL::varchar AS client_version,
         u.open_id, p.nickname, u.source_scene, u.created_at, u.last_client_version
       FROM game_daily_logins l
       JOIN game_users u ON u.app_id=l.app_id AND u.id=l.user_id

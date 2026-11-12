@@ -30,7 +30,7 @@ test('JSON cloud saves with real isolated PostgreSQL/Redis', async t => {
     return r;
   }
   await t.test('云档审计记录会话与实际版本，冲突不产生成功写入日志', async () => {
-    const id='12345678-1234-4234-8234-123456789abc';
+    const id='12345678-1234-4234-8234-123456789abc_ios_apple_iphone15,2';
     const loginResult=(await request(app.getHttpServer()).post('/h5login/api/auth/wechat-login').send({code:'identity_save',clientInstanceId:id}).expect(200)).body;
     await call(loginResult.accessToken,'get',{});
     await call(loginResult.accessToken,'save',{version:0,data:'{}'});
