@@ -25,7 +25,7 @@ class WechatLoginDto {
   // 本地实例标识可省略以兼容旧客户端；显式无效值必须拒绝。
   @ValidateIf((body: WechatLoginDto) => body.clientInstanceId !== undefined)
   @IsString()
-  @Length(36, 159)
+  @Length(42, 159)
   @Matches(CLIENT_INSTANCE_PATTERN)
   clientInstanceId?: string;
 

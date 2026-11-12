@@ -48,7 +48,7 @@ test('compiled rewarded-video completion HTTP records authenticated player event
   assert.equal(row.client_instance_id,instanceA);assert.equal(row.session_id,events[0].session_id);
   await call('auth/wechat-login',{code,clientInstanceId:'bad'},undefined,400);
   await call('auth/wechat-login',{code,clientInstanceId:null},undefined,400);
-  for (const tail of ['_ios_apple', '_ios_apple_bad\n', '_ios_apple_'+ 'x'.repeat(41), '_ios_apple_<script>']) await call('auth/wechat-login',{code,clientInstanceId:randomUUID()+tail},undefined,400);
+  for (const tail of ['', '_ios_apple', '_ios_apple_bad\n', '_ios_apple_'+ 'x'.repeat(41), '_ios_apple_<script>']) await call('auth/wechat-login',{code,clientInstanceId:randomUUID()+tail},undefined,400);
  });
  await t.test('same completed event retries are idempotent and changed payload is rejected',async()=>{
   assert.deepEqual((await call(path,payload,a.accessToken)).data,{...first,alreadyRecorded:true});
