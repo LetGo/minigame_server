@@ -90,14 +90,14 @@ const walk=e=>[e,...e.children.flatMap(walk)];
 test('login logs show one row per successful login with its own scene and the separate first-source scene',async()=>{
  const {app,view}=await setup();app.renderLoginLogs(data,view);
  const table=walk(view).find(e=>e.className.includes('login-logs-table'));assert(table);
- assert.deepEqual(table.children[0].children[0].children.map(e=>e.textContent),['登录时间（北京时间）','openid','昵称','客户端版本','本次登录场景','首次来源场景','注册时间（北京时间）']);
- const rows=table.children[1].children;assert.equal(rows.length,2,'two returned login records render as two rows');assert.equal(rows[0].children.length,7);
+ assert.deepEqual(table.children[0].children[0].children.map(e=>e.textContent),['登录时间（北京时间）','openid','昵称','客户端版本','客户端实例 ID','登录会话 ID','本次登录场景','首次来源场景','注册时间（北京时间）']);
+ const rows=table.children[1].children;assert.equal(rows.length,2,'two returned login records render as two rows');assert.equal(rows[0].children.length,9);
 
  assert.equal(rows[0].children[0].textContent,new Date(record.loginAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}));assert.equal(rows[0].children[1].textContent,record.openid);assert.equal(rows[0].children[2].textContent,record.nickname);assert.equal(rows[0].children[2].children.length,0,'nickname rendered only as text');assert.equal(rows[1].children[2].textContent,'—');assert.equal(rows[0].children[3].textContent,'2.0.7');assert.equal(rows[1].children[3].textContent,'—');
- assert.equal(rows[0].children[4].textContent,'1001','per-login scene displays only its raw ID');assert.equal(rows[0].children[4].title,app.formatScene(1001),'official full description appears only in tooltip');
- assert.equal(rows[1].children[4].textContent,'—','a null or legacy login scene renders a dash, not a fabricated value');
- assert.equal(rows[0].children[5].textContent,'1030');assert.equal(rows[0].children[5].title,'1030 · 自动化测试下打开小程序');assert.equal(rows[1].children[5].textContent,'未上报','first-source column keeps its existing unreported wording');
- assert.equal(rows[0].children[6].textContent,'2026/10/18 00:01:02');assert.equal(rows[1].children[6].textContent,'—');assert.match(view.textContent,/2026-10-20/);assert.match(view.textContent,/共 2 条/);
+ assert.equal(rows[0].children[6].textContent,'1001','per-login scene displays only its raw ID');assert.equal(rows[0].children[6].title,app.formatScene(1001),'official full description appears only in tooltip');
+ assert.equal(rows[1].children[6].textContent,'—','a null or legacy login scene renders a dash, not a fabricated value');
+ assert.equal(rows[0].children[7].textContent,'1030');assert.equal(rows[0].children[7].title,'1030 · 自动化测试下打开小程序');assert.equal(rows[1].children[7].textContent,'未上报','first-source column keeps its existing unreported wording');
+ assert.equal(rows[0].children[8].textContent,'2026/10/18 00:01:02');assert.equal(rows[1].children[8].textContent,'—');assert.match(view.textContent,/2026-10-20/);assert.match(view.textContent,/共 2 条/);
 });
 test('today registrants are green across the entire row using the server Beijing day, not query or browser date',async()=>{
  const {app,view}=await setup(undefined,'2026-10-21T12:00:00Z');
@@ -107,7 +107,7 @@ test('today registrants are green across the entire row using the server Beijing
  const rows=walk(view).find(e=>e.className.includes('login-logs-table')).children[1].children;
  assert.equal(rows[0].className,'login-log-new-user','today registration marks its entire table row');
  assert.equal(rows[1].className,'','yesterday registration remains normal even if login occurred today');
- assert.equal(rows[0].children.length,7);assert.equal(JSON.stringify(response),before,'source records are unchanged');
+ assert.equal(rows[0].children.length,9);assert.equal(JSON.stringify(response),before,'source records are unchanged');
 });
 test('new-user highlighting respects both Beijing midnight edges, missing dates and day rollover',async()=>{
  const {app,view}=await setup();
@@ -126,7 +126,7 @@ test('login logs explain that green means registered today in Beijing',async()=>
  assert.match(view.textContent,/北京时间今天注册的玩家.*整行绿色/);
 });
 test('login logs render empty results with disabled pagination',async()=>{
- const {app,view}=await setup();app.renderLoginLogs({...data,total:0,items:[]},view);assert.match(view.textContent,/暂无.*登录记录/);assert.equal(walk(view).find(e=>e.colSpan).colSpan,7);const buttons=walk(view).filter(e=>e.events.click);assert.equal(buttons.length,2);assert(buttons.every(e=>e.disabled));assert.doesNotMatch(view.textContent,/NaN|Infinity/);
+ const {app,view}=await setup();app.renderLoginLogs({...data,total:0,items:[]},view);assert.match(view.textContent,/暂无.*登录记录/);assert.equal(walk(view).find(e=>e.colSpan).colSpan,9);const buttons=walk(view).filter(e=>e.events.click);assert.equal(buttons.length,2);assert(buttons.every(e=>e.disabled));assert.doesNotMatch(view.textContent,/NaN|Infinity/);
 });
 test('both login scene columns show only raw IDs and retain full safe descriptions in tooltips',async()=>{
  const {app,view}=await setup();
@@ -134,13 +134,13 @@ test('both login scene columns show only raw IDs and retain full safe descriptio
   const item={...record,sourceScene,loginScene,clientVersion:'<img src=x onerror=alert(1)>'},before=JSON.stringify(item);
   app.renderLoginLogs({...data,items:[item],total:1},view);
   const row=walk(view).find(e=>e.className.includes('login-logs-table')).children[1].children[0];
-  for(const [index,value]of [[4,loginScene],[5,sourceScene]]){
-   const cell=row.children[index],fallback=index===4?'—':'未上报',full=value==null?fallback:app.formatScene(value);
+  for(const [index,value]of [[6,loginScene],[7,sourceScene]]){
+   const cell=row.children[index],fallback=index===6?'—':'未上报',full=value==null?fallback:app.formatScene(value);
    assert.equal(cell.textContent,value==null?fallback:String(value),'display preserves the raw ID without appending description or truncating it');
    assert.equal(cell.title,full);assert.equal(cell.children.length,0,'scene text only');
   }
-  if(loginScene!=null&&String(loginScene).includes('<img'))assert.equal(row.children[4].textContent.startsWith('<img'),true,'markup-looking login scene stays inert text');
-  if(sourceScene!=null&&String(sourceScene).includes('<img'))assert.equal(row.children[5].textContent.startsWith('<img'),true,'markup-looking source scene stays inert text');
+  if(loginScene!=null&&String(loginScene).includes('<img'))assert.equal(row.children[6].textContent.startsWith('<img'),true,'markup-looking login scene stays inert text');
+  if(sourceScene!=null&&String(sourceScene).includes('<img'))assert.equal(row.children[7].textContent.startsWith('<img'),true,'markup-looking source scene stays inert text');
   assert.equal(row.children[3].textContent,item.clientVersion);assert.equal(row.children[3].children.length,0,'version text only');assert.equal(JSON.stringify(item),before,'no source mutation');
  }
 });

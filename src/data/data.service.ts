@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException, HttpException, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { Request } from 'express';
 import { AppConfig } from '../config.js';
@@ -15,7 +15,7 @@ export class DataService {
     try {
       raw = await this.infrastructure.redis.withCommandOptions({ abortSignal: AbortSignal.timeout(3000) }).get(`minigame:session:${digest}`);
     } catch { throw new ServiceUnavailableException('DATA_STORAGE_UNAVAILABLE'); }
-    let session: { userId?: unknown; appId?: unknown };
+    let session: { userId?: unknown; appId?: unknown; clientInstanceId?: unknown; sessionId?: unknown };
     try { session = JSON.parse(raw ?? 'null'); } catch { throw new UnauthorizedException('SESSION_INVALID'); }
     if (!session || session.appId !== this.config.appId || typeof session.userId !== 'string' ||
         !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(session.userId)) throw new UnauthorizedException('SESSION_INVALID');
@@ -30,7 +30,11 @@ export class DataService {
       throw new HttpException('DATA_RATE_LIMITED', 429);
     }
     if (Object.keys(request.query).length) throw new BadRequestException('INVALID_DATA_REQUEST');
-    return { userId: session.userId, payload: request.body as unknown };
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return { userId: session.userId,
+      clientInstanceId: typeof session.clientInstanceId === 'string' && uuid.test(session.clientInstanceId) ? session.clientInstanceId : null,
+      sessionId: typeof session.sessionId === 'string' && uuid.test(session.sessionId) ? session.sessionId : null,
+      payload: request.body as unknown };
   }
 
   async save(request: Request) {
@@ -44,11 +48,11 @@ export class DataService {
     try {
       result = input.version === 0 ?
         await this.infrastructure.pool.query<{ version: number; updated_at: Date }>(
-          'INSERT INTO game_saves (user_id, data, version) VALUES ($1,$2,1) ON CONFLICT (user_id) DO NOTHING RETURNING version, updated_at',
-          [context.userId, input.data]) :
+          `WITH saved AS (INSERT INTO game_saves (user_id, data, version) VALUES ($1,$2,1) ON CONFLICT (user_id) DO NOTHING RETURNING version, updated_at), audit AS (INSERT INTO game_save_access_events(id,app_id,user_id,operation,version,client_instance_id,session_id) SELECT $3,$4,$1,'save',version,$5,$6 FROM saved) SELECT * FROM saved`,
+          [context.userId, input.data, randomUUID(), this.config.appId, context.clientInstanceId, context.sessionId]) :
         await this.infrastructure.pool.query<{ version: number; updated_at: Date }>(
-          'UPDATE game_saves SET data=$2,version=version+1,updated_at=now() WHERE user_id=$1 AND version=$3 RETURNING version, updated_at',
-          [context.userId, input.data, input.version]);
+          `WITH saved AS (UPDATE game_saves SET data=$2,version=version+1,updated_at=now() WHERE user_id=$1 AND version=$3 RETURNING version, updated_at), audit AS (INSERT INTO game_save_access_events(id,app_id,user_id,operation,version,client_instance_id,session_id) SELECT $4,$5,$1,'save',version,$6,$7 FROM saved) SELECT * FROM saved`,
+          [context.userId, input.data, input.version, randomUUID(), this.config.appId, context.clientInstanceId, context.sessionId]);
     } catch { throw new ServiceUnavailableException('DATA_STORAGE_UNAVAILABLE'); }
     const row = result.rows[0];
     if (!row) throw new ConflictException('SAVE_VERSION_CONFLICT');
@@ -63,7 +67,7 @@ export class DataService {
     let result;
     try {
       result = await this.infrastructure.pool.query<{ data: string; version: number; updated_at: Date }>(
-        'SELECT data, version, updated_at FROM game_saves WHERE user_id=$1', [context.userId]);
+        `WITH snapshot AS MATERIALIZED (SELECT data, version, updated_at FROM game_saves WHERE user_id=$1), audit AS (INSERT INTO game_save_access_events(id,app_id,user_id,operation,version,client_instance_id,session_id) VALUES ($2,$3,$1,'get',coalesce((SELECT version FROM snapshot),0),$4,$5)) SELECT * FROM snapshot`, [context.userId, randomUUID(), this.config.appId, context.clientInstanceId, context.sessionId]);
     } catch { throw new ServiceUnavailableException('DATA_STORAGE_UNAVAILABLE'); }
     const row = result.rows[0];
     return row ?

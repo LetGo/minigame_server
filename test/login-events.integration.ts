@@ -302,12 +302,15 @@ test('login events: every successful login appends one scene event in the login 
         { column_name: 'user_id', data_type: 'uuid', character_maximum_length: null, is_nullable: 'NO', is_identity: 'NO', identity_generation: null },
         { column_name: 'login_at', data_type: 'timestamp with time zone', character_maximum_length: null, is_nullable: 'NO', is_identity: 'NO', identity_generation: null },
         { column_name: 'scene', data_type: 'integer', character_maximum_length: null, is_nullable: 'YES', is_identity: 'NO', identity_generation: null },
+        { column_name: 'client_instance_id', data_type: 'uuid', character_maximum_length: null, is_nullable: 'YES', is_identity: 'NO', identity_generation: null },
+        { column_name: 'session_id', data_type: 'uuid', character_maximum_length: null, is_nullable: 'YES', is_identity: 'NO', identity_generation: null },
+        { column_name: 'client_version', data_type: 'character varying', character_maximum_length: 64, is_nullable: 'YES', is_identity: 'NO', identity_generation: null },
       ]);
 
       const indexed = (await owner.query(
         `SELECT indexdef FROM pg_indexes WHERE schemaname='public' AND tablename='game_login_events' ORDER BY indexname`)).rows
         .map(row => row.indexdef.replace(/\s+/g, ' '));
-      assert.equal(indexed.length, 3, 'primary key plus the two historical-union indexes');
+      assert.equal(indexed.length, 4, 'primary key plus the two historical-union indexes');
       assert.ok(indexed.some(def => /\(app_id, login_at DESC, id DESC\)/.test(def)), 'missing (app_id, login_at DESC, id DESC)');
       assert.ok(indexed.some(def => /\(app_id, user_id, login_at\)/.test(def)), 'missing (app_id, user_id, login_at)');
 

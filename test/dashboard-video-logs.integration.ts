@@ -85,9 +85,9 @@ test('video logs HTTP/SQL on isolated PG15439 and Redis16389: exact day/player, 
   assert.equal(p1.total,expected.length);assert.equal(p2.total,expected.length);assert.equal(p1.items.length,50);assert.equal(p2.items.length,expected.length-50);assert.equal(p1.limit,50);assert.equal(p1.hasMore,true);assert.equal(p2.hasMore,false);
   assert.equal(p1.openid,null);assert.equal(p1.date,day);assert.equal(p1.today,clock.today);assert.equal(p1.timezone,'Asia/Shanghai');assert(Number.isFinite(Date.parse(p1.generatedAt)));
   assert.deepEqual(Object.keys(p1).sort(),['today','date','timezone','generatedAt','openid','placement','total','offset','limit','hasMore','items'].sort());
-  assert.deepEqual(actual.map((e:any)=>({...e,recordedAt:normalize(e.recordedAt)})),expected);
+  assert.deepEqual(actual.map(({clientInstanceId,sessionId,...rest}:any)=>({...rest,recordedAt:normalize(rest.recordedAt)})),expected);
   assert.equal(new Set(actual.map((e:any)=>e.placement)).size,expected.length);
-  assert(actual.every((e:any)=>Object.keys(e).sort().join(',')==='nickname,openid,placement,recordedAt'));
+  assert(actual.every((e:any)=>Object.keys(e).sort().join(',')==='clientInstanceId,nickname,openid,placement,recordedAt,sessionId'));
   assert(actual.some((e:any)=>e.nickname===null));assert.equal(actual.filter((e:any)=>e.placement==='deduplicated').length,1);
   const again=(await post({date:day,offset:50},cookie).expect(200)).body;assert.deepEqual(again.items,p2.items);
   const beyond=(await post({date:day,offset:100},cookie).expect(200)).body;assert.equal(beyond.total,expected.length);assert.deepEqual(beyond.items,[]);assert.equal(beyond.hasMore,false);
@@ -96,7 +96,7 @@ test('video logs HTTP/SQL on isolated PG15439 and Redis16389: exact day/player, 
   for(const openid of ['video_exact','video_exact_extra','no_profile','incomplete','VIDEO_EXACT','absent']){
    const first=(await post({date:day,openid},cookie).expect(200)).body,next=(await post({date:day,openid,offset:50},cookie).expect(200)).body,expected=oracle(openid);
    assert.equal(first.openid,openid);assert.equal(first.total,expected.length);assert.equal(first.hasMore,expected.length>50);assert.equal(next.hasMore,false);
-   assert.deepEqual([...first.items,...next.items].map((e:any)=>({...e,recordedAt:normalize(e.recordedAt)})),expected);
+   assert.deepEqual([...first.items,...next.items].map(({clientInstanceId,sessionId,...rest}:any)=>({...rest,recordedAt:normalize(rest.recordedAt)})),expected);
   }
   const defaults=(await post({openid:'video_exact'},cookie).expect(200)).body;assert.equal(defaults.date,clock.today);assert.equal(defaults.total,1);assert.equal(defaults.items[0].placement,'today');
   await owner.query('UPDATE game_profiles SET nickname=$2 WHERE user_id=$1',[exact.uid,'最新昵称']);

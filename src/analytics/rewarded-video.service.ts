@@ -11,11 +11,11 @@ export class RewardedVideoService {
  private async storage<T>(operation:()=>Promise<T>):Promise<T> {
   try{return await operation();}catch(error){if(error instanceof HttpException)throw error;throw new ServiceUnavailableException('REWARDED_VIDEO_STORAGE_UNAVAILABLE');}
  }
- private async session(request:Request):Promise<string> {
+ private async session(request:Request):Promise<{userId:string;clientInstanceId:string|null;sessionId:string|null}> {
   const match=/^Bearer ([A-Za-z0-9_-]{43})$/.exec(request.get('authorization')??'');
   if(!match||Buffer.from(match[1]!,'base64url').toString('base64url')!==match[1])throw new UnauthorizedException('SESSION_INVALID');
   const raw=await this.storage(()=>this.infrastructure.redis.withCommandOptions({abortSignal:AbortSignal.timeout(3000)}).get('minigame:session:'+createHash('sha256').update(match[1]!).digest('hex')));
-  let session:{appId?:unknown;userId?:unknown}|null;
+  let session:{appId?:unknown;userId?:unknown;clientInstanceId?:unknown;sessionId?:unknown}|null;
   try{session=JSON.parse(raw??'null');}catch{throw new UnauthorizedException('SESSION_INVALID');}
   if(!session||typeof session!=='object'||session.appId!==this.config.appId||typeof session.userId!=='string'||!UUID.test(session.userId))throw new UnauthorizedException('SESSION_INVALID');
   const userId=session.userId;
@@ -26,7 +26,8 @@ export class RewardedVideoService {
    {keys:[`minigame:rewarded-video-rate:${this.config.appId}:${userId}`],arguments:[]}
   )) as [number,number];
   if(rate[0]>60){request.res?.setHeader('Retry-After',String(Math.max(1,rate[1])));throw new HttpException('REWARDED_VIDEO_RATE_LIMITED',429);}
-  return userId;
+  // 身份字段只取自服务端会话；旧会话保留未知值。
+  return {userId,clientInstanceId:typeof session.clientInstanceId==='string'&&UUID.test(session.clientInstanceId)?session.clientInstanceId:null,sessionId:typeof session.sessionId==='string'&&UUID.test(session.sessionId)?session.sessionId:null};
  }
  private validate(placement:string,info:unknown):string {
   const invalid=():never=>{throw new BadRequestException('INVALID_REWARDED_VIDEO_REQUEST');};
@@ -45,7 +46,7 @@ export class RewardedVideoService {
   return serialized;
  }
  async completed(request:Request) {
-  const userId=await this.session(request),body:unknown=request.body;
+  const {userId,clientInstanceId,sessionId}=await this.session(request),body:unknown=request.body;
   if(Object.keys(request.query).length||!body||typeof body!=='object'||Array.isArray(body))throw new BadRequestException('INVALID_REWARDED_VIDEO_REQUEST');
   const input=body as Record<string,unknown>;
   if(Object.keys(input).some(k=>!['eventId','placement','clientInfo'].includes(k))||typeof input.eventId!=='string'||!UUID.test(input.eventId)||typeof input.placement!=='string')throw new BadRequestException('INVALID_REWARDED_VIDEO_REQUEST');
@@ -54,7 +55,7 @@ export class RewardedVideoService {
    const client=await this.infrastructure.pool.connect();let discard=false;
    try{
     await client.query('BEGIN');
-    const inserted=await client.query<EventRow>('INSERT INTO game_rewarded_video_events(app_id,user_id,event_id,placement,client_info) VALUES($1,$2,$3,$4,$5::jsonb) ON CONFLICT(app_id,user_id,event_id) DO NOTHING RETURNING event_id,user_id,placement,recorded_at',[this.config.appId,userId,eventId,placement,clientInfo]);
+    const inserted=await client.query<EventRow>('INSERT INTO game_rewarded_video_events(app_id,user_id,event_id,placement,client_info,client_instance_id,session_id) VALUES($1,$2,$3,$4,$5::jsonb,$6,$7) ON CONFLICT(app_id,user_id,event_id) DO NOTHING RETURNING event_id,user_id,placement,recorded_at',[this.config.appId,userId,eventId,placement,clientInfo,clientInstanceId,sessionId]);
     const row=inserted.rows[0]??(await client.query<EventRow&{same_payload:boolean}>('SELECT event_id,user_id,placement,recorded_at,(placement=$4 AND client_info=$5::jsonb) AS same_payload FROM game_rewarded_video_events WHERE app_id=$1 AND user_id=$2 AND event_id=$3',[this.config.appId,userId,eventId,placement,clientInfo])).rows[0];
     if(!row)throw new Error('Event receipt unavailable');
     if(!inserted.rowCount&&'same_payload' in row&&!row.same_payload)throw new ConflictException('REWARDED_VIDEO_EVENT_CONFLICT');

@@ -162,7 +162,7 @@ export async function loginLogs(pool, appId, offset = 0, date = null, openid = n
       SELECT selected_date::timestamp AT TIME ZONE 'Asia/Shanghai' AS day_start,
         (selected_date+1)::timestamp AT TIME ZONE 'Asia/Shanghai' AS day_end FROM settings
     ), events AS MATERIALIZED (
-      SELECT e.user_id, e.login_at, e.id AS event_id, e.scene, u.open_id, p.nickname,
+      SELECT e.user_id, e.login_at, e.id AS event_id, e.scene, e.client_instance_id, e.session_id, e.client_version, u.open_id, p.nickname,
         u.source_scene, u.created_at, u.last_client_version
       FROM game_login_events e CROSS JOIN bounds b
       JOIN game_users u ON u.app_id=e.app_id AND u.id=e.user_id
@@ -170,7 +170,7 @@ export async function loginLogs(pool, appId, offset = 0, date = null, openid = n
       WHERE e.app_id=$1 AND e.login_at>=b.day_start AND e.login_at<b.day_end AND u.first_login_completed
         AND ($4::text IS NULL OR u.open_id=$4::text)
     ), legacy AS MATERIALIZED (
-      SELECT l.user_id, l.first_login_at AS login_at, NULL::bigint AS event_id, NULL::int AS scene,
+      SELECT l.user_id, l.first_login_at AS login_at, NULL::bigint AS event_id, NULL::int AS scene, NULL::uuid AS client_instance_id, NULL::uuid AS session_id, NULL::varchar AS client_version,
         u.open_id, p.nickname, u.source_scene, u.created_at, u.last_client_version
       FROM game_daily_logins l
       JOIN game_users u ON u.app_id=l.app_id AND u.id=l.user_id
@@ -190,7 +190,7 @@ export async function loginLogs(pool, appId, offset = 0, date = null, openid = n
       'openid',$4::text,'total',t.total,'offset',$2::int,'limit',50,'hasMore',($2::int+50)<t.total,
       'items',coalesce((SELECT json_agg(json_build_object(
         'loginAt',login_at,'openid',open_id,'nickname',nickname,'sourceScene',source_scene,'loginScene',scene,
-        'registeredAt',created_at,'clientVersion',last_client_version
+        'registeredAt',created_at,'clientVersion',coalesce(client_version,last_client_version),'clientInstanceId',client_instance_id,'sessionId',session_id
       ) ORDER BY login_at DESC,user_id DESC,event_id DESC NULLS LAST) FROM page),'[]'::json)
     ) AS result FROM settings s CROSS JOIN totals t`, [appId, offset, date, openid]);
   if (!rows[0]?.result) throw new Error('Login records unavailable');
@@ -211,7 +211,7 @@ export async function videoLogs(pool, appId, offset = 0, date = null, openid = n
       SELECT selected_date::timestamp AT TIME ZONE 'Asia/Shanghai' AS day_start,
         (selected_date+1)::timestamp AT TIME ZONE 'Asia/Shanghai' AS day_end FROM settings
     ), matching AS MATERIALIZED (
-      SELECT e.recorded_at,e.event_id,e.user_id,u.open_id,p.nickname,e.placement
+      SELECT e.recorded_at,e.event_id,e.user_id,u.open_id,p.nickname,e.placement,e.client_instance_id,e.session_id
       FROM game_rewarded_video_events e CROSS JOIN bounds b
       JOIN game_users u ON u.app_id=e.app_id AND u.id=e.user_id
       LEFT JOIN game_profiles p ON p.user_id=u.id
@@ -226,7 +226,7 @@ export async function videoLogs(pool, appId, offset = 0, date = null, openid = n
       'today',s.today::text,'date',s.selected_date::text,'timezone','Asia/Shanghai','generatedAt',s.generated_at,
       'openid',$4::text,'placement',$5::text,'total',t.total,'offset',$2::int,'limit',50,'hasMore',($2::int+50)<t.total,
       'items',coalesce((SELECT json_agg(json_build_object(
-        'recordedAt',recorded_at,'openid',open_id,'nickname',nickname,'placement',placement
+        'recordedAt',recorded_at,'openid',open_id,'nickname',nickname,'placement',placement,'clientInstanceId',client_instance_id,'sessionId',session_id
       ) ORDER BY recorded_at DESC,event_id DESC,user_id DESC) FROM page),'[]'::json)
     ) AS result FROM settings s CROSS JOIN totals t`, [appId, offset, date, openid, placement]);
   if (!rows[0]?.result) throw new Error('Video records unavailable');

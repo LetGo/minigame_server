@@ -29,6 +29,17 @@ test('JSON cloud saves with real isolated PostgreSQL/Redis', async t => {
     assert.equal(r.headers['cache-control'], 'no-store');
     return r;
   }
+  await t.test('云档审计记录会话与实际版本，冲突不产生成功写入日志', async () => {
+    const id='12345678-1234-4234-8234-123456789abc';
+    const loginResult=(await request(app.getHttpServer()).post('/h5login/api/auth/wechat-login').send({code:'identity_save',clientInstanceId:id}).expect(200)).body;
+    await call(loginResult.accessToken,'get',{});
+    await call(loginResult.accessToken,'save',{version:0,data:'{}'});
+    await call(loginResult.accessToken,'save',{version:0,data:'{}'},409);
+    await call(loginResult.accessToken,'get',{});
+    const rows=(await pool.query('SELECT operation,version,client_instance_id,session_id FROM game_save_access_events WHERE user_id=$1 ORDER BY recorded_at',[loginResult.user.id])).rows;
+    assert.deepEqual(rows.map(r=>[r.operation,r.version]),[['get',0],['save',1],['get',1]]);
+    assert(rows.every(r=>r.client_instance_id===id&&r.session_id===rows[0].session_id));assert(rows[0].session_id);
+  });
   await t.test('authenticated get accepts ordinary JSON and returns ordinary JSON without crypto fields', async () => {
     const r = await call(one.accessToken, 'get', {});
     assert.deepEqual(r.body, { exists: false, version: 0, data: null, updatedAt: null });

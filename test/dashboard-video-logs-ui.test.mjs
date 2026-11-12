@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {runInNewContext} from 'node:vm';
 import {JSDOM} from 'jsdom';
 const settle=()=>new Promise(r=>setImmediate(r));
-const item={recordedAt:'2026-10-19T16:30:00Z',openid:'oPlayer_exact-1',nickname:'<img src=x onerror=alert(1)>',placement:'boss_reward'};
+const item={recordedAt:'2026-10-19T16:30:00Z',openid:'oPlayer_exact-1',nickname:'<img src=x onerror=alert(1)>',placement:'boss_reward',clientInstanceId:'实例-A',sessionId:'会话-A'};
 const sample={today:'2026-10-20',date:'2026-10-20',timezone:'Asia/Shanghai',generatedAt:'2026-10-19T16:31:00Z',openid:null,total:2,offset:0,limit:50,hasMore:false,items:[item,{...item,recordedAt:'2026-10-19T16:20:00Z',nickname:null,placement:'<script>raw</script>'}]};
 async function setup(t,fetch=async()=>({ok:true,json:async()=>sample})){
  const html=await readFile(new URL('../dashboard/public/index.html',import.meta.url),'utf8');
@@ -118,7 +118,7 @@ test('empty video-log pages keep four-column colspan, no fake rows and bounded p
  const {app,view}=await setup(t);assert.equal(typeof app.renderVideoLogs,'function');
  for(const openid of [null,'missing-player']){
   app.renderVideoLogs({...sample,openid,total:0,items:[]},view);
-  assert.match(view.textContent,/暂无.*视频/);const cell=view.querySelector('tbody td');assert.equal(cell.colSpan,4);assert.equal(view.querySelectorAll('tbody tr').length,1);
+  assert.match(view.textContent,/暂无.*视频/);const cell=view.querySelector('tbody td');assert.equal(cell.colSpan,6);assert.equal(view.querySelectorAll('tbody tr').length,1);
   assert(button(view,'上一页').disabled&&button(view,'下一页').disabled);assert.doesNotMatch(view.textContent,/NaN|Infinity/);
  }
 });
@@ -127,9 +127,9 @@ test('video-log tab loads today and renders each stored event with four safe tex
  const nav=document.querySelector('[data-view="videoLogs"]');assert(nav,'video-log tab must exist');assert.equal(nav.textContent,'视频日志');
  app.activate();app.switchView('videoLogs');await settle();assert.equal(document.getElementById('page-title').textContent,'视频日志');
  assert.deepEqual(calls,[{url:'/h5dashboard/api/video-logs',body:{offset:0,date:'2026-10-20'},method:'POST'}]);
- assert.deepEqual([...view.querySelectorAll('th')].map(e=>e.textContent),['时间（北京时间）','openid','昵称','视频广告点位']);
+ assert.deepEqual([...view.querySelectorAll('th')].map(e=>e.textContent),['时间（北京时间）','openid','昵称','视频广告点位','客户端实例 ID','登录会话 ID']);
  const rows=view.querySelectorAll('.video-logs-table tbody tr');assert.equal(rows.length,2);
- assert.deepEqual([...rows[0].children].map(e=>e.textContent),['2026/10/20 00:30:00',item.openid,item.nickname,item.placement]);
+ assert.deepEqual([...rows[0].children].map(e=>e.textContent),['2026/10/20 00:30:00',item.openid,item.nickname,item.placement,item.clientInstanceId,item.sessionId]);
  assert.equal(rows[1].children[2].textContent,'—');assert.equal(rows[1].children[3].textContent,'<script>raw</script>');assert.equal(view.querySelectorAll('img,script').length,0);
  assert.match(view.textContent,/服务端.*入库/);assert.match(view.textContent,/不代表.*(广告平台|有效播放)/);assert.match(view.textContent,/共 2 条/);
 });
@@ -161,3 +161,5 @@ test('clearing a date invalidates an in-flight refresh without silently querying
 test('rendering preserves source items and does not apply login new-registration green rows to videos',async t=>{
  const {app,view}=await setup(t);const before=JSON.stringify(sample);app.renderVideoLogs(sample,view);assert.equal(JSON.stringify(sample),before);assert.equal(view.querySelectorAll('.login-log-new-user').length,0);
 });
+
+test('广告日志展示实例与会话标识',async t=>{const {app,document}=await setup(t);const target=document.createElement('div');app.renderVideoLogs(sample,target);assert.match(target.textContent,/客户端实例 ID/);assert.match(target.textContent,/实例-A/);assert.match(target.textContent,/会话-A/);});

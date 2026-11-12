@@ -29,13 +29,26 @@ test('compiled rewarded-video completion HTTP records authenticated player event
  app=await createApplication(config,{wechat});await app.listen(0,'127.0.0.1');
  const base=`http://127.0.0.1:${app.getHttpServer().address().port}/h5login/api/`;
  async function call(path:string,body:unknown,token?:string,expected=200){const r=await fetch(base+path,{signal:AbortSignal.timeout(8000),method:'POST',headers:{'content-type':'application/json',...(token?{authorization:'Bearer '+token}:{})},body:JSON.stringify(body)});const data=await r.json() as any;assert.equal(r.status,expected,`${path} => ${JSON.stringify(data)}`);assert.equal(r.headers.get('cache-control'),'no-store');return {data,headers:r.headers};}
- const login=async(code:string)=>(await call('auth/wechat-login',{code})).data;
+ const login=async(code:string,clientInstanceId?:string)=>(await call('auth/wechat-login',{code,...(clientInstanceId?{clientInstanceId}:{})})).data;
  const a=await login('video_a_'+role),b=await login('video_b_'+role),path='analytics/rewarded-video/completed';
  t.beforeEach(async()=>{await redis.del([`minigame:rewarded-video-rate:${appId}:${a.user.id}`,`minigame:rewarded-video-rate:${appId}:${b.user.id}`]);});
  const payload={eventId:randomUUID(),placement:'revive',clientInfo:{level:12,adUnitId:'test-ad-unit',nested:{value:'中文'},clientCompletedAt:'2000-01-01T00:00:00Z'}};
  const before=Date.now(),first=(await call(path,payload,a.accessToken)).data;
  assert.deepEqual(Object.keys(first).sort(),['alreadyRecorded','eventId','placement','recordedAt','userId']);assert.equal(first.alreadyRecorded,false);assert.equal(first.eventId,payload.eventId);assert.equal(first.userId,a.user.id);assert.equal(first.placement,'revive');assert(Date.parse(first.recordedAt)>=before-1000&&Date.parse(first.recordedAt)<=Date.now()+1000);
  const row=(await owner.query('SELECT * FROM game_rewarded_video_events WHERE app_id=$1 AND user_id=$2 AND event_id=$3',[appId,a.user.id,payload.eventId])).rows[0];assert.deepEqual(row.client_info,payload.clientInfo);assert.equal(row.recorded_at.toISOString(),first.recordedAt);
+ await t.test('不同实例登录、广告事件关联与跨会话重试保留首次归属',async()=>{
+  const instanceA=randomUUID(),instanceB=randomUUID(),code='identity_'+role;
+  const a=await login(code,instanceA),b=await login(code,instanceB);
+  const events=(await owner.query('SELECT client_instance_id,session_id FROM game_login_events WHERE app_id=$1 AND user_id=$2 ORDER BY login_at',[appId,a.user.id])).rows;
+  assert.equal(events.length,2);assert.equal(events[0].client_instance_id,instanceA);assert.equal(events[1].client_instance_id,instanceB);
+  assert.notEqual(events[0].session_id,events[1].session_id);
+  const event={eventId:randomUUID(),placement:'Fish_Gacha'};
+  await call(path,event,a.accessToken);await call(path,event,b.accessToken);
+  const row=(await owner.query('SELECT client_instance_id,session_id FROM game_rewarded_video_events WHERE app_id=$1 AND user_id=$2 AND event_id=$3',[appId,a.user.id,event.eventId])).rows[0];
+  assert.equal(row.client_instance_id,instanceA);assert.equal(row.session_id,events[0].session_id);
+  await call('auth/wechat-login',{code,clientInstanceId:'bad'},undefined,400);
+  await call('auth/wechat-login',{code,clientInstanceId:null},undefined,400);
+ });
  await t.test('same completed event retries are idempotent and changed payload is rejected',async()=>{
   assert.deepEqual((await call(path,payload,a.accessToken)).data,{...first,alreadyRecorded:true});
   assert.deepEqual((await call(path,{...payload,clientInfo:{clientCompletedAt:payload.clientInfo.clientCompletedAt,nested:{value:'中文'},adUnitId:'test-ad-unit',level:12}},a.accessToken)).data,{...first,alreadyRecorded:true});

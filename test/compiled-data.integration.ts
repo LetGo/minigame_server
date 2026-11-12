@@ -19,6 +19,7 @@ test('compiled API and distributed SDK round trip over real HTTP with least-priv
     await owner.query(`CREATE ROLE ${role} LOGIN PASSWORD 'isolated-compiled-test-only'`);
     await owner.query(`GRANT USAGE ON SCHEMA public TO ${role}`);
     await owner.query(`GRANT SELECT, INSERT, UPDATE ON game_users, game_saves TO ${role}`);
+    await owner.query(`GRANT INSERT ON game_save_access_events TO ${role}`);
     await owner.query(`GRANT SELECT, INSERT ON game_daily_logins TO ${role}`);
     await owner.query(`GRANT INSERT ON game_login_events TO ${role}`);
     await owner.query(`GRANT SELECT ON game_profiles TO ${role}`);

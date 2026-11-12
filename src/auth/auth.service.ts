@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { ServiceUnavailableException } from '@nestjs/common';
 import { PoolClient } from 'pg';
 import { AppConfig } from '../config.js';
@@ -12,7 +12,7 @@ export class AuthService {
     private readonly wechat: WechatClient,
   ) {}
 
-  async login(code: string, clientVersion?: string, scene?: number) {
+  async login(code: string, clientVersion?: string, scene?: number, clientInstanceId?: string) {
     const { openid } = await this.wechat.exchange(code);
     let client: PoolClient | undefined;
     let sessionKey: string | undefined;
@@ -45,11 +45,13 @@ export class AuthService {
       );
       const profile = profileResult.rows[0];
       const isNewUser = !user.first_login_completed;
+      const sessionId = randomUUID();
+      const instanceId = clientInstanceId?.toLowerCase() ?? null;
       const accessToken = randomBytes(32).toString('base64url');
       sessionKey = `minigame:session:${createHash('sha256').update(accessToken).digest('hex')}`;
       const stored = await this.infrastructure.redis.withCommandOptions({ abortSignal: AbortSignal.timeout(3000) }).set(
         sessionKey,
-        JSON.stringify({ userId: user.id, appId: this.config.appId, issuedAt: new Date().toISOString(), isNewUser }),
+        JSON.stringify({ userId: user.id, appId: this.config.appId, issuedAt: new Date().toISOString(), isNewUser, sessionId, clientInstanceId: instanceId }),
         { EX: this.config.sessionTtlSeconds, NX: true },
       );
       if (stored !== 'OK') throw new Error('Session creation failed');
@@ -82,11 +84,11 @@ export class AuthService {
              SELECT app_id,id,(last_login_at AT TIME ZONE 'Asia/Shanghai')::date,last_login_at FROM login
              ON CONFLICT (app_id,activity_date,user_id) DO NOTHING
          ), event AS (
-           INSERT INTO game_login_events(app_id,user_id,login_at,scene)
-             SELECT app_id,id,last_login_at,$2 FROM login
+           INSERT INTO game_login_events(app_id,user_id,login_at,scene,client_instance_id,session_id,client_version)
+             SELECT app_id,id,last_login_at,$2,$3,$4,$5 FROM login
          )
          SELECT 1`,
-        [user.id, scene ?? null],
+        [user.id, scene ?? null, instanceId, sessionId, clientVersion ?? null],
       );
       await client.query('COMMIT');
       return { accessToken, tokenType: 'Bearer', expiresIn: this.config.sessionTtlSeconds, isNewUser,

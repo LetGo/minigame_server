@@ -20,6 +20,12 @@ class WechatLoginDto {
   @Matches(CLIENT_VERSION_PATTERN)
   clientVersion?: string;
 
+  // 本地实例标识可省略以兼容旧客户端；显式无效值必须拒绝。
+  @ValidateIf((body: WechatLoginDto) => body.clientInstanceId !== undefined)
+  @IsString()
+  @Matches(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
+  clientInstanceId?: string;
+
   // Optional first-registration launch scene. Omitted means "no report"; an explicit
   // null/string/boolean/fraction/zero/negative/overflow must fail instead of being
   // coerced or reaching the column constraint as a storage error.
@@ -45,6 +51,6 @@ export class AuthController {
     forbidNonWhitelisted: true,
     validationError: { target: false, value: false },
   })) body: WechatLoginDto) {
-    return this.auth.login(body.code, body.clientVersion, body.scene);
+    return this.auth.login(body.code, body.clientVersion, body.scene, body.clientInstanceId);
   }
 }
